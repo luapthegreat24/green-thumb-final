@@ -13,9 +13,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { P, SP, TY } from "@/constants/herbarium-theme";
 import { PlantCard } from "@/features/garden/presentation/components/plant-card";
 import { useGarden } from "../../../../providers/garden-provider";
-import { P, SP, TY } from "@/constants/herbarium-theme";
 
 const WATER_FILTERS = [
   { key: "all", label: "All" },
@@ -25,7 +25,8 @@ const WATER_FILTERS = [
 
 export function GardenListScreen() {
   const insets = useSafeAreaInsets();
-  const { filteredPlants, filters, setFilters, loading, refreshing, refresh } = useGarden();
+  const { filteredPlants, filters, setFilters, loading, refreshing, refresh } =
+    useGarden();
 
   if (loading) {
     return (
@@ -48,13 +49,22 @@ export function GardenListScreen() {
             paddingBottom: insets.bottom + SP.xxxl + 84,
           },
         ]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={P.g1} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refresh}
+            tintColor={P.g1}
+          />
+        }
         ListHeaderComponent={
           <View style={{ gap: SP.md }}>
             <View style={styles.hero}>
               <Text style={styles.eyebrow}>Garden Management</Text>
               <Text style={styles.title}>My Plants</Text>
-              <Text style={styles.subtitle}>Track watering, update details, and keep plant care history in one place.</Text>
+              <Text style={styles.subtitle}>
+                Track watering, update details, and keep plant care history in
+                one place.
+              </Text>
             </View>
 
             <TextInput
@@ -79,7 +89,8 @@ export function GardenListScreen() {
                   <Text
                     style={[
                       styles.filterChipText,
-                      filters.watering === filter.key && styles.filterChipTextActive,
+                      filters.watering === filter.key &&
+                        styles.filterChipTextActive,
                     ]}
                   >
                     {filter.label}
@@ -100,12 +111,17 @@ export function GardenListScreen() {
           <View style={styles.emptyCard}>
             <Ionicons name="leaf-outline" size={30} color={P.g2} />
             <Text style={styles.emptyTitle}>No plants yet</Text>
-            <Text style={styles.emptyText}>Tap the floating + button to add your first plant.</Text>
+            <Text style={styles.emptyText}>
+              Tap the floating + button to add your first plant.
+            </Text>
           </View>
         }
       />
 
-      <Pressable onPress={() => router.push("/plants/new" as never)} style={({ pressed }) => [styles.fab, pressed && { opacity: 0.9 }]}>
+      <Pressable
+        onPress={() => router.push("/plants/new" as never)}
+        style={({ pressed }) => [styles.fab, pressed && { opacity: 0.9 }]}
+      >
         <Ionicons name="add" size={28} color={P.p0} />
       </Pressable>
     </View>

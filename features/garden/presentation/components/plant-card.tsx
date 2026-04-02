@@ -3,11 +3,15 @@ import { Image } from "expo-image";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { formatWateringLabel, getDaysUntilWatering } from "@/features/garden/application/plant-utils";
-import type { Plant } from "@/features/garden/domain/plant";
 import { P, SP, TY } from "@/constants/herbarium-theme";
+import {
+  formatWateringLabel,
+  getDaysUntilWatering,
+} from "@/features/garden/application/plant-utils";
+import type { Plant } from "@/features/garden/domain/plant";
 
-const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1463320726281-696a485928c7?auto=format&fit=crop&w=600&q=60";
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1463320726281-696a485928c7?auto=format&fit=crop&w=600&q=60";
 
 type PlantCardProps = {
   plant: Plant;
@@ -19,8 +23,15 @@ export function PlantCard({ plant, onPress }: PlantCardProps) {
   const wateringLabel = formatWateringLabel(plant);
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}>
-      <Image source={{ uri: plant.imageUri ?? FALLBACK_IMAGE }} style={styles.image} contentFit="cover" />
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+    >
+      <Image
+        source={{ uri: plant.imageUri ?? FALLBACK_IMAGE }}
+        style={styles.image}
+        contentFit="cover"
+      />
       <View style={styles.content}>
         <Text style={styles.name}>{plant.name}</Text>
         <Text style={styles.species}>{plant.species}</Text>
@@ -30,7 +41,9 @@ export function PlantCard({ plant, onPress }: PlantCardProps) {
             size={14}
             color={days <= 0 ? P.rust : P.g1}
           />
-          <Text style={[styles.metaText, days <= 0 && styles.urgentText]}>{wateringLabel}</Text>
+          <Text style={[styles.metaText, days <= 0 && styles.urgentText]}>
+            {wateringLabel}
+          </Text>
         </View>
       </View>
     </Pressable>

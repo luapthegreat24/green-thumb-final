@@ -2,7 +2,13 @@ import { Redirect, router } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { View } from "react-native";
 
-import { AuthButton, AuthField, AuthLink, AuthNotice, AuthShell } from "@/components/auth/auth-shell";
+import {
+  AuthButton,
+  AuthField,
+  AuthLink,
+  AuthNotice,
+  AuthShell,
+} from "@/components/auth/auth-shell";
 import { useAuth } from "../../providers/auth-provider";
 
 function validateEmail(email: string) {
@@ -19,7 +25,11 @@ export default function SignupScreen() {
   const formError = error ?? localError;
 
   const canSubmit = useMemo(() => {
-    return displayName.trim().length > 0 && validateEmail(email) && password.trim().length >= 8;
+    return (
+      displayName.trim().length > 0 &&
+      validateEmail(email) &&
+      password.trim().length >= 8
+    );
   }, [displayName, email, password]);
 
   if (user) {
@@ -92,7 +102,12 @@ export default function SignupScreen() {
         secureTextEntry
         autoComplete="new-password"
       />
-      <AuthButton label="Create account" onPress={onSubmit} loading={loading} disabled={!canSubmit} />
+      <AuthButton
+        label="Create account"
+        onPress={onSubmit}
+        loading={loading}
+        disabled={!canSubmit}
+      />
     </AuthShell>
   );
 }

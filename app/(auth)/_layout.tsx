@@ -9,7 +9,14 @@ export default function AuthLayout() {
 
   if (initializing) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F7F7F5" }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#F7F7F5",
+        }}
+      >
         <ActivityIndicator size="large" color="#1F6B3A" />
       </View>
     );

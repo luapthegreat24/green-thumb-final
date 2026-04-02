@@ -2,11 +2,19 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import React, { useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import type { Plant, UpsertPlantInput } from "@/features/garden/domain/plant";
 import { P, SP, TY } from "@/constants/herbarium-theme";
+import type { Plant, UpsertPlantInput } from "@/features/garden/domain/plant";
 
 type PlantFormProps = {
   initialPlant?: Plant;
@@ -16,16 +24,29 @@ type PlantFormProps = {
   onDelete?: () => void;
 };
 
-const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1463320726281-696a485928c7?auto=format&fit=crop&w=600&q=60";
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1463320726281-696a485928c7?auto=format&fit=crop&w=600&q=60";
 
-export function PlantForm({ initialPlant, submitLabel, busy, onSubmit, onDelete }: PlantFormProps) {
+export function PlantForm({
+  initialPlant,
+  submitLabel,
+  busy,
+  onSubmit,
+  onDelete,
+}: PlantFormProps) {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState(initialPlant?.name ?? "");
   const [species, setSpecies] = useState(initialPlant?.species ?? "");
-  const [datePlanted, setDatePlanted] = useState(initialPlant?.datePlanted ?? new Date().toISOString().slice(0, 10));
-  const [wateringFrequencyDays, setWateringFrequencyDays] = useState(String(initialPlant?.wateringFrequencyDays ?? 7));
+  const [datePlanted, setDatePlanted] = useState(
+    initialPlant?.datePlanted ?? new Date().toISOString().slice(0, 10),
+  );
+  const [wateringFrequencyDays, setWateringFrequencyDays] = useState(
+    String(initialPlant?.wateringFrequencyDays ?? 7),
+  );
   const [notes, setNotes] = useState(initialPlant?.notes ?? "");
-  const [imageUri, setImageUri] = useState<string | undefined>(initialPlant?.imageUri);
+  const [imageUri, setImageUri] = useState<string | undefined>(
+    initialPlant?.imageUri,
+  );
   const [error, setError] = useState<string | null>(null);
 
   const valid = useMemo(() => {
@@ -39,35 +60,53 @@ export function PlantForm({ initialPlant, submitLabel, busy, onSubmit, onDelete 
   const chooseFromGallery = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert("Permission required", "Allow photo library access to attach a plant photo.");
+      Alert.alert(
+        "Permission required",
+        "Allow photo library access to attach a plant photo.",
+      );
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
+      base64: true,
       quality: 0.85,
     });
 
     if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      if (asset.base64) {
+        setImageUri(`data:image/jpeg;base64,${asset.base64}`);
+      } else {
+        setImageUri(asset.uri);
+      }
     }
   };
 
   const takePhoto = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert("Permission required", "Allow camera access to capture a plant photo.");
+      Alert.alert(
+        "Permission required",
+        "Allow camera access to capture a plant photo.",
+      );
       return;
     }
 
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
+      base64: true,
       quality: 0.85,
     });
 
     if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      if (asset.base64) {
+        setImageUri(`data:image/jpeg;base64,${asset.base64}`);
+      } else {
+        setImageUri(asset.uri);
+      }
     }
   };
 
@@ -110,7 +149,11 @@ export function PlantForm({ initialPlant, submitLabel, busy, onSubmit, onDelete 
     >
       <View style={styles.card}>
         <Text style={styles.label}>Plant Image</Text>
-        <Image source={{ uri: imageUri ?? FALLBACK_IMAGE }} style={styles.image} contentFit="cover" />
+        <Image
+          source={{ uri: imageUri ?? FALLBACK_IMAGE }}
+          style={styles.image}
+          contentFit="cover"
+        />
         <View style={styles.row}>
           <Pressable onPress={chooseFromGallery} style={styles.secondaryButton}>
             <Ionicons name="images-outline" size={16} color={P.g0} />
@@ -125,24 +168,67 @@ export function PlantForm({ initialPlant, submitLabel, busy, onSubmit, onDelete 
 
       <View style={styles.card}>
         <Text style={styles.label}>Plant Name *</Text>
-        <TextInput value={name} onChangeText={setName} placeholder="Monstera" placeholderTextColor={P.i3} style={styles.input} />
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="Monstera"
+          placeholderTextColor={P.i3}
+          style={styles.input}
+        />
 
         <Text style={styles.label}>Plant Type / Species *</Text>
-        <TextInput value={species} onChangeText={setSpecies} placeholder="Monstera deliciosa" placeholderTextColor={P.i3} style={styles.input} />
+        <TextInput
+          value={species}
+          onChangeText={setSpecies}
+          placeholder="Monstera deliciosa"
+          placeholderTextColor={P.i3}
+          style={styles.input}
+        />
 
         <Text style={styles.label}>Date Planted (YYYY-MM-DD) *</Text>
-        <TextInput value={datePlanted} onChangeText={setDatePlanted} placeholder="2026-04-02" placeholderTextColor={P.i3} autoCapitalize="none" style={styles.input} />
+        <TextInput
+          value={datePlanted}
+          onChangeText={setDatePlanted}
+          placeholder="2026-04-02"
+          placeholderTextColor={P.i3}
+          autoCapitalize="none"
+          style={styles.input}
+        />
 
         <Text style={styles.label}>Watering Frequency (days) *</Text>
-        <TextInput value={wateringFrequencyDays} onChangeText={setWateringFrequencyDays} keyboardType="number-pad" placeholder="7" placeholderTextColor={P.i3} style={styles.input} />
+        <TextInput
+          value={wateringFrequencyDays}
+          onChangeText={setWateringFrequencyDays}
+          keyboardType="number-pad"
+          placeholder="7"
+          placeholderTextColor={P.i3}
+          style={styles.input}
+        />
 
         <Text style={styles.label}>Notes (optional)</Text>
-        <TextInput value={notes} onChangeText={setNotes} placeholder="Sunlight, soil, reminders..." placeholderTextColor={P.i3} multiline style={[styles.input, { minHeight: 90, textAlignVertical: "top" }]} />
+        <TextInput
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Sunlight, soil, reminders..."
+          placeholderTextColor={P.i3}
+          multiline
+          style={[styles.input, { minHeight: 90, textAlignVertical: "top" }]}
+        />
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Pressable disabled={!valid || busy} onPress={submit} style={({ pressed }) => [styles.primaryButton, (!valid || busy) && styles.disabledButton, pressed && valid && !busy && styles.pressedButton]}>
-          <Text style={styles.primaryButtonText}>{busy ? "Saving..." : submitLabel}</Text>
+        <Pressable
+          disabled={!valid || busy}
+          onPress={submit}
+          style={({ pressed }) => [
+            styles.primaryButton,
+            (!valid || busy) && styles.disabledButton,
+            pressed && valid && !busy && styles.pressedButton,
+          ]}
+        >
+          <Text style={styles.primaryButtonText}>
+            {busy ? "Saving..." : submitLabel}
+          </Text>
         </Pressable>
 
         {onDelete ? (

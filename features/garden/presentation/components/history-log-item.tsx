@@ -1,9 +1,9 @@
+import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 
-import type { PlantHistoryLog } from "@/features/garden/domain/plant";
 import { P, SP, TY } from "@/constants/herbarium-theme";
+import type { PlantHistoryLog } from "@/features/garden/domain/plant";
 
 function iconForAction(action: PlantHistoryLog["action"]) {
   switch (action) {
@@ -27,7 +27,9 @@ export function HistoryLogItem({ log }: { log: PlantHistoryLog }) {
       <View style={{ flex: 1, gap: 4 }}>
         <Text style={styles.title}>{log.action.toUpperCase()}</Text>
         {log.note ? <Text style={styles.note}>{log.note}</Text> : null}
-        <Text style={styles.date}>{new Date(log.createdAt).toLocaleString()}</Text>
+        <Text style={styles.date}>
+          {new Date(log.createdAt).toLocaleString()}
+        </Text>
       </View>
     </View>
   );

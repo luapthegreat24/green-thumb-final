@@ -1,6 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 
 import { P, SP, TY } from "@/constants/herbarium-theme";
 
@@ -85,7 +85,12 @@ type AuthButtonProps = {
   disabled?: boolean;
 };
 
-export function AuthButton({ label, onPress, loading, disabled }: AuthButtonProps) {
+export function AuthButton({
+  label,
+  onPress,
+  loading,
+  disabled,
+}: AuthButtonProps) {
   return (
     <Pressable
       onPress={onPress}
@@ -96,7 +101,9 @@ export function AuthButton({ label, onPress, loading, disabled }: AuthButtonProp
         pressed && !disabled && !loading && styles.primaryButtonPressed,
       ]}
     >
-      <Text style={styles.primaryButtonText}>{loading ? "Please wait..." : label}</Text>
+      <Text style={styles.primaryButtonText}>
+        {loading ? "Please wait..." : label}
+      </Text>
     </Pressable>
   );
 }

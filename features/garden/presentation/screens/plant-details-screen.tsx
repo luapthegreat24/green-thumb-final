@@ -2,23 +2,32 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import React, { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { formatWateringLabel } from "@/features/garden/application/plant-utils";
-import { HistoryLogItem } from "@/features/garden/presentation/components/history-log-item";
-import type { Plant, PlantCareAction } from "@/features/garden/domain/plant";
-import { useGarden } from "../../../../providers/garden-provider";
 import { P, SP, TY } from "@/constants/herbarium-theme";
+import { formatWateringLabel } from "@/features/garden/application/plant-utils";
+import type { Plant, PlantCareAction } from "@/features/garden/domain/plant";
+import { HistoryLogItem } from "@/features/garden/presentation/components/history-log-item";
+import { useGarden } from "../../../../providers/garden-provider";
 
-const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1463320726281-696a485928c7?auto=format&fit=crop&w=600&q=60";
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1463320726281-696a485928c7?auto=format&fit=crop&w=600&q=60";
 
-const ACTIONS: Array<{ action: PlantCareAction; label: string; icon: string }> = [
-  { action: "watered", label: "Watered", icon: "water-outline" },
-  { action: "fertilized", label: "Fertilized", icon: "flask-outline" },
-  { action: "pruned", label: "Pruned", icon: "cut-outline" },
-  { action: "note", label: "Note", icon: "create-outline" },
-];
+const ACTIONS: Array<{ action: PlantCareAction; label: string; icon: string }> =
+  [
+    { action: "watered", label: "Watered", icon: "water-outline" },
+    { action: "fertilized", label: "Fertilized", icon: "flask-outline" },
+    { action: "pruned", label: "Pruned", icon: "cut-outline" },
+    { action: "note", label: "Note", icon: "create-outline" },
+  ];
 
 export function PlantDetailsScreen({ plant }: { plant: Plant }) {
   const { addHistoryLog } = useGarden();
@@ -36,6 +45,14 @@ export function PlantDetailsScreen({ plant }: { plant: Plant }) {
     }
   };
 
+  const onBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/(tabs)" as never);
+  };
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: P.p1 }}
@@ -47,7 +64,16 @@ export function PlantDetailsScreen({ plant }: { plant: Plant }) {
         },
       ]}
     >
-      <Image source={{ uri: plant.imageUri ?? FALLBACK_IMAGE }} style={styles.heroImage} contentFit="cover" />
+      <Pressable onPress={onBack} style={styles.backButton}>
+        <Ionicons name="arrow-back" size={16} color={P.i1} />
+        <Text style={styles.backText}>Back</Text>
+      </Pressable>
+
+      <Image
+        source={{ uri: plant.imageUri ?? FALLBACK_IMAGE }}
+        style={styles.heroImage}
+        contentFit="cover"
+      />
 
       <View style={styles.card}>
         <Text style={styles.name}>{plant.name}</Text>
@@ -55,9 +81,19 @@ export function PlantDetailsScreen({ plant }: { plant: Plant }) {
 
         <View style={styles.metaGrid}>
           <Meta label="Date planted" value={plant.datePlanted} />
-          <Meta label="Water every" value={`${plant.wateringFrequencyDays} days`} />
+          <Meta
+            label="Water every"
+            value={`${plant.wateringFrequencyDays} days`}
+          />
           <Meta label="Next watering" value={formatWateringLabel(plant)} />
-          <Meta label="Last watered" value={plant.lastWateredAt ? new Date(plant.lastWateredAt).toLocaleDateString() : "Not yet"} />
+          <Meta
+            label="Last watered"
+            value={
+              plant.lastWateredAt
+                ? new Date(plant.lastWateredAt).toLocaleDateString()
+                : "Not yet"
+            }
+          />
         </View>
 
         {plant.notes ? (
@@ -67,7 +103,10 @@ export function PlantDetailsScreen({ plant }: { plant: Plant }) {
           </View>
         ) : null}
 
-        <Pressable onPress={() => router.push(`/plants/${plant.id}/edit` as never)} style={styles.editButton}>
+        <Pressable
+          onPress={() => router.push(`/plants/${plant.id}/edit` as never)}
+          style={styles.editButton}
+        >
           <Ionicons name="create-outline" size={16} color={P.p0} />
           <Text style={styles.editButtonText}>Edit plant</Text>
         </Pressable>
@@ -89,11 +128,16 @@ export function PlantDetailsScreen({ plant }: { plant: Plant }) {
             <Pressable
               key={item.action}
               onPress={() => logAction(item.action)}
-              style={({ pressed }) => [styles.actionButton, pressed && { opacity: 0.9 }]}
+              style={({ pressed }) => [
+                styles.actionButton,
+                pressed && { opacity: 0.9 },
+              ]}
               disabled={busyAction !== null}
             >
               <Ionicons name={item.icon as any} size={14} color={P.g1} />
-              <Text style={styles.actionText}>{busyAction === item.action ? "Saving..." : item.label}</Text>
+              <Text style={styles.actionText}>
+                {busyAction === item.action ? "Saving..." : item.label}
+              </Text>
             </Pressable>
           ))}
         </View>
@@ -102,7 +146,9 @@ export function PlantDetailsScreen({ plant }: { plant: Plant }) {
           {plant.history.length === 0 ? (
             <Text style={styles.emptyHistory}>No history logs yet.</Text>
           ) : (
-            plant.history.map((entry) => <HistoryLogItem key={entry.id} log={entry} />)
+            plant.history.map((entry) => (
+              <HistoryLogItem key={entry.id} log={entry} />
+            ))
           )}
         </View>
       </View>
@@ -123,6 +169,23 @@ const styles = StyleSheet.create({
   container: {
     padding: SP.lg,
     gap: SP.md,
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: P.p0,
+    borderWidth: 1,
+    borderColor: P.hair,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  backText: {
+    ...TY.body,
+    color: P.i1,
+    fontWeight: "700",
   },
   heroImage: {
     width: "100%",

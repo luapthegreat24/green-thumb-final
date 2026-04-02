@@ -1,7 +1,7 @@
 import React from "react";
 
-import { GardenListScreen } from "@/features/garden/presentation/screens/garden-list-screen";
+import { DashboardScreen } from "@/features/garden/presentation/screens/dashboard-screen";
 
 export default function GardenTabScreen() {
-  return <GardenListScreen />;
+  return <DashboardScreen />;
 }

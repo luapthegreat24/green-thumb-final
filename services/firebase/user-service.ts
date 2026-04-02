@@ -52,23 +52,39 @@ export async function createUserProfileDoc(input: {
   displayName: string;
   photoURL?: string;
 }) {
-  await setDoc(doc(firebaseDb, "users", input.uid), {
+  const data: Record<string, unknown> = {
     email: input.email,
     displayName: input.displayName,
-    photoURL: input.photoURL,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  if (input.photoURL !== undefined) {
+    data.photoURL = input.photoURL;
+  }
+
+  await setDoc(doc(firebaseDb, "users", input.uid), data);
 }
 
 export async function updateUserProfileDoc(
   uid: string,
   updates: Partial<Pick<UserProfile, "displayName" | "email" | "photoURL">>,
 ) {
-  await updateDoc(doc(firebaseDb, "users", uid), {
-    ...updates,
+  const data: Record<string, unknown> = {
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  if (updates.displayName !== undefined) {
+    data.displayName = updates.displayName;
+  }
+  if (updates.email !== undefined) {
+    data.email = updates.email;
+  }
+  if (updates.photoURL !== undefined) {
+    data.photoURL = updates.photoURL;
+  }
+
+  await updateDoc(doc(firebaseDb, "users", uid), data);
 }
 
 export function subscribeUserProfile(

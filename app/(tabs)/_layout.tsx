@@ -1,7 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Redirect, Tabs } from "expo-router";
 import React, { useEffect, useRef } from "react";
-import { ActivityIndicator, Animated, Pressable, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator,
+  Animated,
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "../../providers/auth-provider";
@@ -129,7 +135,9 @@ function TabIconButton({
       accessibilityState={isFocused ? { selected: true } : {}}
       accessibilityLabel={accessibilityLabel}
     >
-      <Animated.View style={[st.iconWrap, { transform: [{ scale }, { translateY }] }]}>
+      <Animated.View
+        style={[st.iconWrap, { transform: [{ scale }, { translateY }] }]}
+      >
         <Ionicons
           name={(isFocused ? iconOn : icon) as any}
           size={isFocused ? 23 : 21}
@@ -144,7 +152,7 @@ function HerbariumTabBar({ state, descriptors, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[st.barOuter, { bottom: insets.bottom + 10 }]}> 
+    <View style={[st.barOuter, { bottom: insets.bottom + 10 }]}>
       {/* Tab items */}
       <View style={st.tabRow}>
         {state.routes.map((route: any, index: number) => {
@@ -196,7 +204,14 @@ export default function TabLayout() {
 
   if (initializing) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: P.p1 }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: P.p1,
+        }}
+      >
         <ActivityIndicator size="large" color={P.g1} />
       </View>
     );

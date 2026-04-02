@@ -2,9 +2,15 @@ import { Redirect, router } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 
-import { AuthButton, AuthField, AuthLink, AuthNotice, AuthShell } from "@/components/auth/auth-shell";
-import { useAuth } from "../../providers/auth-provider";
+import {
+  AuthButton,
+  AuthField,
+  AuthLink,
+  AuthNotice,
+  AuthShell,
+} from "@/components/auth/auth-shell";
 import { P, SP, TY } from "@/constants/herbarium-theme";
+import { useAuth } from "../../providers/auth-provider";
 
 function validateEmail(email: string) {
   return /^\S+@\S+\.\S+$/.test(email.trim());
@@ -88,7 +94,12 @@ export default function LoginScreen() {
         secureTextEntry
         autoComplete="password"
       />
-      <AuthButton label="Sign in" onPress={onSubmit} loading={loading} disabled={!canSubmit} />
+      <AuthButton
+        label="Sign in"
+        onPress={onSubmit}
+        loading={loading}
+        disabled={!canSubmit}
+      />
     </AuthShell>
   );
 }

@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import {
   calculateNextWateringDate,
@@ -12,6 +18,7 @@ import type {
   UpsertPlantInput,
 } from "@/features/garden/domain/plant";
 import { useAuth } from "@/providers/auth-provider";
+import { isLocalMediaUri } from "@/services/firebase/media-upload";
 import {
   addCareLogDoc,
   addPlantDoc,
@@ -24,6 +31,7 @@ import {
   subscribeSchedules,
   updatePlantDoc,
   updateScheduleDoc,
+  uploadPlantImage,
   type FirestoreCareLog,
   type FirestorePlant,
   type FirestoreSchedule,
@@ -43,7 +51,11 @@ type GardenContextValue = {
   updatePlant: (plantId: string, updates: UpsertPlantInput) => Promise<void>;
   deletePlant: (plantId: string) => Promise<void>;
   getPlantById: (plantId: string) => Plant | undefined;
-  addHistoryLog: (plantId: string, action: PlantCareAction, note?: string) => Promise<void>;
+  addHistoryLog: (
+    plantId: string,
+    action: PlantCareAction,
+    note?: string,
+  ) => Promise<void>;
   createSchedule: (input: {
     plantId: string;
     taskType: "watering" | "fertilizing" | "pruning";
@@ -57,7 +69,10 @@ type GardenContextValue = {
 
 const GardenContext = createContext<GardenContextValue | undefined>(undefined);
 
-function toHistoryLogs(logs: FirestoreCareLog[], plantId: string): PlantHistoryLog[] {
+function toHistoryLogs(
+  logs: FirestoreCareLog[],
+  plantId: string,
+): PlantHistoryLog[] {
   return logs
     .filter((entry) => entry.plantId === plantId)
     .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
@@ -102,7 +117,10 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
   const [schedules, setSchedules] = useState<FirestoreSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filters, setFiltersState] = useState<PlantFilters>({ query: "", watering: "all" });
+  const [filters, setFiltersState] = useState<PlantFilters>({
+    query: "",
+    watering: "all",
+  });
 
   useEffect(() => {
     if (!user) {
@@ -150,7 +168,10 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user]);
 
-  const plants = useMemo(() => toPlants(rawPlants, careLogs), [rawPlants, careLogs]);
+  const plants = useMemo(
+    () => toPlants(rawPlants, careLogs),
+    [rawPlants, careLogs],
+  );
 
   const refresh = async () => {
     setRefreshing(true);
@@ -188,7 +209,18 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
   const addPlant = async (input: UpsertPlantInput) => {
     if (!user) throw new Error("You must be logged in.");
 
-    const plantId = await addPlantDoc(user.uid, input);
+    // Upload image if it's a local file
+    let finalImageUri = input.imageUri;
+    if (input.imageUri && isLocalMediaUri(input.imageUri)) {
+      const plantId = Math.random().toString(36).slice(2, 9);
+      finalImageUri = await uploadPlantImage(user.uid, plantId, input.imageUri!);
+    }
+
+    const plantInput: UpsertPlantInput = {
+      ...input,
+      imageUri: finalImageUri,
+    };
+    const plantId = await addPlantDoc(user.uid, plantInput);
 
     await addCareLogDoc({
       userId: user.uid,
@@ -204,7 +236,7 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
       datePlanted: input.datePlanted,
       wateringFrequencyDays: input.wateringFrequencyDays,
       notes: input.notes,
-      imageUri: input.imageUri,
+      imageUri: finalImageUri,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       history: [],
@@ -220,7 +252,19 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updatePlant = async (plantId: string, updates: UpsertPlantInput) => {
-    await updatePlantDoc(plantId, updates);
+    if (!user) throw new Error("You must be logged in.");
+
+    // Upload image if it's a local file
+    let finalUpdates = updates;
+    if (updates.imageUri && isLocalMediaUri(updates.imageUri)) {
+      const imageUrl = await uploadPlantImage(user.uid, plantId, updates.imageUri!);
+      finalUpdates = {
+        ...updates,
+        imageUri: imageUrl,
+      };
+    }
+    
+    await updatePlantDoc(plantId, finalUpdates);
 
     const existing = plants.find((item) => item.id === plantId);
     if (!existing) return;
@@ -231,9 +275,9 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
 
     const nextPlant: Plant = {
       ...existing,
-      ...updates,
-      notes: updates.notes,
-      imageUri: updates.imageUri,
+      ...finalUpdates,
+      notes: finalUpdates.notes,
+      imageUri: finalUpdates.imageUri,
       updatedAt: new Date().toISOString(),
     };
 
@@ -250,7 +294,9 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
     await deletePlantDoc(plantId);
 
     const logsToDelete = careLogs.filter((log) => log.plantId === plantId);
-    const schedulesToDelete = schedules.filter((schedule) => schedule.plantId === plantId);
+    const schedulesToDelete = schedules.filter(
+      (schedule) => schedule.plantId === plantId,
+    );
 
     await Promise.all([
       ...logsToDelete.map((entry) => deleteCareLogDoc(entry.id)),
@@ -258,9 +304,14 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
     ]);
   };
 
-  const getPlantById = (plantId: string) => plants.find((plant) => plant.id === plantId);
+  const getPlantById = (plantId: string) =>
+    plants.find((plant) => plant.id === plantId);
 
-  const addHistoryLog = async (plantId: string, action: PlantCareAction, note?: string) => {
+  const addHistoryLog = async (
+    plantId: string,
+    action: PlantCareAction,
+    note?: string,
+  ) => {
     if (!user) throw new Error("You must be logged in.");
 
     await addCareLogDoc({ userId: user.uid, plantId, action, note });
@@ -294,7 +345,10 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const filteredPlants = useMemo(() => filterPlants(plants, filters), [plants, filters]);
+  const filteredPlants = useMemo(
+    () => filterPlants(plants, filters),
+    [plants, filters],
+  );
 
   const value = useMemo<GardenContextValue>(
     () => ({
@@ -318,7 +372,9 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
     [plants, careLogs, schedules, loading, refreshing, filters, filteredPlants],
   );
 
-  return <GardenContext.Provider value={value}>{children}</GardenContext.Provider>;
+  return (
+    <GardenContext.Provider value={value}>{children}</GardenContext.Provider>
+  );
 }
 
 export function useGarden() {

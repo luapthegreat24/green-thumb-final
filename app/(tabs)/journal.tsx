@@ -21,12 +21,17 @@ export default function JournalScreen() {
       <View style={styles.hero}>
         <Text style={styles.eyebrow}>Journal</Text>
         <Text style={styles.title}>Recent activity</Text>
-        <Text style={styles.subtitle}>A simple landing page for notes, reminders, and plant history.</Text>
+        <Text style={styles.subtitle}>
+          A simple landing page for notes, reminders, and plant history.
+        </Text>
       </View>
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>What you can add here</Text>
-        <Text style={styles.cardBody}>Watering notes, growth photos, repotting dates, or maintenance reminders.</Text>
+        <Text style={styles.cardBody}>
+          Watering notes, growth photos, repotting dates, or maintenance
+          reminders.
+        </Text>
       </View>
     </ScrollView>
   );

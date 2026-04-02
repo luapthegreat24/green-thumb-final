@@ -12,8 +12,12 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 
-import type { PlantCareAction, UpsertPlantInput } from "@/features/garden/domain/plant";
+import type {
+  PlantCareAction,
+  UpsertPlantInput,
+} from "@/features/garden/domain/plant";
 import { firebaseDb } from "@/lib/firebase";
+import { uploadImageUri } from "@/services/firebase/media-upload";
 
 export type FirestorePlant = {
   id: string;
@@ -123,7 +127,11 @@ export function subscribePlants(
   );
 
   return onSnapshot(q, (snapshot) => {
-    onChange(snapshot.docs.map((docSnap) => mapPlant(docSnap.id, docSnap.data() as PlantDoc)));
+    onChange(
+      snapshot.docs.map((docSnap) =>
+        mapPlant(docSnap.id, docSnap.data() as PlantDoc),
+      ),
+    );
   });
 }
 
@@ -138,7 +146,11 @@ export function subscribeCareLogs(
   );
 
   return onSnapshot(q, (snapshot) => {
-    onChange(snapshot.docs.map((docSnap) => mapCareLog(docSnap.id, docSnap.data() as CareLogDoc)));
+    onChange(
+      snapshot.docs.map((docSnap) =>
+        mapCareLog(docSnap.id, docSnap.data() as CareLogDoc),
+      ),
+    );
   });
 }
 
@@ -153,7 +165,11 @@ export function subscribeSchedules(
   );
 
   return onSnapshot(q, (snapshot) => {
-    onChange(snapshot.docs.map((docSnap) => mapSchedule(docSnap.id, docSnap.data() as ScheduleDoc)));
+    onChange(
+      snapshot.docs.map((docSnap) =>
+        mapSchedule(docSnap.id, docSnap.data() as ScheduleDoc),
+      ),
+    );
   });
 }
 
@@ -174,7 +190,10 @@ export async function addPlantDoc(userId: string, input: UpsertPlantInput) {
   return ref.id;
 }
 
-export async function updatePlantDoc(plantId: string, updates: UpsertPlantInput) {
+export async function updatePlantDoc(
+  plantId: string,
+  updates: UpsertPlantInput,
+) {
   await updateDoc(doc(firebaseDb, "plants", plantId), {
     name: updates.name.trim(),
     species: updates.species.trim(),
@@ -243,4 +262,12 @@ export async function updateScheduleDoc(
 
 export async function deleteScheduleDoc(scheduleId: string) {
   await deleteDoc(doc(firebaseDb, "schedules", scheduleId));
+}
+
+export async function uploadPlantImage(
+  userId: string,
+  plantId: string,
+  imageUri: string,
+): Promise<string> {
+  return uploadImageUri(`plants/${userId}/${plantId}/image`, imageUri);
 }

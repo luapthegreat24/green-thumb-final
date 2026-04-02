@@ -1,3 +1,14 @@
+import {
+  EmailAuthProvider,
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  reauthenticateWithCredential,
+  signInWithEmailAndPassword,
+  signOut,
+  updatePassword,
+  updateProfile,
+  type User,
+} from "firebase/auth";
 import React, {
   createContext,
   useContext,
@@ -5,18 +16,9 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import {
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  updateEmail,
-  updateProfile,
-  type User,
-} from "firebase/auth";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
-import { firebaseAuth, firebaseStorage } from "@/lib/firebase";
+import { firebaseAuth } from "@/lib/firebase";
+import { isLocalMediaUri, uploadImageUri } from "@/services/firebase/media-upload";
 import {
   createUserProfileDoc,
   subscribeUserProfile,
@@ -26,8 +28,9 @@ import {
 
 type UpdateProfileInput = {
   displayName: string;
-  email: string;
   photoUri?: string | null;
+  currentPassword?: string;
+  newPassword?: string;
 };
 
 type AuthContextValue = {
@@ -37,7 +40,11 @@ type AuthContextValue = {
   initializing: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (displayName: string, email: string, password: string) => Promise<void>;
+  signup: (
+    displayName: string,
+    email: string,
+    password: string,
+  ) => Promise<void>;
   logout: () => Promise<void>;
   updateUserProfile: (input: UpdateProfileInput) => Promise<void>;
   clearError: () => void;
@@ -46,9 +53,10 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function mapAuthError(error: unknown) {
-  const code = typeof error === "object" && error && "code" in error
-    ? String((error as { code?: unknown }).code)
-    : "";
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: unknown }).code)
+      : "";
 
   switch (code) {
     case "auth/invalid-credential":
@@ -64,18 +72,20 @@ function mapAuthError(error: unknown) {
     case "auth/invalid-email":
       return "Please enter a valid email address.";
     case "auth/requires-recent-login":
-      return "Please sign in again before changing your email.";
+      return "Please sign in again before changing your password.";
+    case "storage/unauthorized":
+      return "Not allowed to upload image. Check Firebase Storage rules.";
+    case "storage/retry-limit-exceeded":
+      return "Image upload timed out. Please try again.";
+    case "storage/unknown":
+      return "Image upload failed. Please choose the image again and retry.";
     default:
       return "Something went wrong. Please try again.";
   }
 }
 
 async function uploadAvatarPhoto(uid: string, photoUri: string) {
-  const response = await fetch(photoUri);
-  const blob = await response.blob();
-  const photoRef = ref(firebaseStorage, `profiles/${uid}/avatar.jpg`);
-  await uploadBytes(photoRef, blob, { contentType: blob.type || "image/jpeg" });
-  return await getDownloadURL(photoRef);
+  return uploadImageUri(`profiles/${uid}/avatar`, photoUri);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -88,34 +98,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let profileUnsubscribe: (() => void) | undefined;
 
-    const authUnsubscribe = onAuthStateChanged(firebaseAuth, async (nextUser) => {
-      profileUnsubscribe?.();
-      profileUnsubscribe = undefined;
+    const authUnsubscribe = onAuthStateChanged(
+      firebaseAuth,
+      async (nextUser) => {
+        profileUnsubscribe?.();
+        profileUnsubscribe = undefined;
 
-      if (!nextUser) {
-        setUser(null);
-        setProfile(null);
-        setInitializing(false);
-        return;
-      }
-
-      setUser(nextUser);
-
-      profileUnsubscribe = subscribeUserProfile(nextUser.uid, async (nextProfile) => {
-        if (!nextProfile) {
-          await createUserProfileDoc({
-            uid: nextUser.uid,
-            email: nextUser.email ?? "",
-            displayName: nextUser.displayName ?? "",
-            photoURL: nextUser.photoURL ?? undefined,
-          });
+        if (!nextUser) {
+          setUser(null);
+          setProfile(null);
+          setInitializing(false);
           return;
         }
 
-        setProfile(nextProfile);
-        setInitializing(false);
-      });
-    });
+        setUser(nextUser);
+
+        profileUnsubscribe = subscribeUserProfile(
+          nextUser.uid,
+          async (nextProfile) => {
+            if (!nextProfile) {
+              const createInput: Parameters<typeof createUserProfileDoc>[0] = {
+                uid: nextUser.uid,
+                email: nextUser.email ?? "",
+                displayName: nextUser.displayName ?? "",
+              };
+              if (nextUser.photoURL) {
+                createInput.photoURL = nextUser.photoURL;
+              }
+              await createUserProfileDoc(createInput);
+              return;
+            }
+
+            setProfile(nextProfile);
+            setInitializing(false);
+          },
+        );
+      },
+    );
 
     return () => {
       authUnsubscribe();
@@ -138,7 +157,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signup = async (displayName: string, email: string, password: string) => {
+  const signup = async (
+    displayName: string,
+    email: string,
+    password: string,
+  ) => {
     setLoading(true);
     setError(null);
     try {
@@ -152,12 +175,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         displayName: displayName.trim(),
       });
 
-      await createUserProfileDoc({
+      const createInput: Parameters<typeof createUserProfileDoc>[0] = {
         uid: credential.user.uid,
         email: email.trim(),
         displayName: displayName.trim(),
-        photoURL: credential.user.photoURL ?? undefined,
-      });
+      };
+      if (credential.user.photoURL) {
+        createInput.photoURL = credential.user.photoURL;
+      }
+      await createUserProfileDoc(createInput);
 
       await credential.user.reload();
       setUser(firebaseAuth.currentUser);
@@ -184,7 +210,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateUserProfile = async ({ displayName, email, photoUri }: UpdateProfileInput) => {
+  const updateUserProfile = async ({
+    displayName,
+    photoUri,
+    currentPassword,
+    newPassword,
+  }: UpdateProfileInput) => {
     const currentUser = firebaseAuth.currentUser;
     if (!currentUser) {
       throw new Error("No user is signed in.");
@@ -195,29 +226,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       let photoURL = currentUser.photoURL;
-      if (photoUri) {
+      if (photoUri && isLocalMediaUri(photoUri)) {
         photoURL = await uploadAvatarPhoto(currentUser.uid, photoUri);
+      } else if (photoUri) {
+        photoURL = photoUri;
       }
+
+      const authSafePhotoURL =
+        photoURL &&
+        (photoURL.startsWith("http://") || photoURL.startsWith("https://"))
+          ? photoURL
+          : undefined;
 
       const normalizedName = displayName.trim();
-      const normalizedEmail = email.trim();
 
-      if (normalizedName !== (currentUser.displayName ?? "") || photoURL !== currentUser.photoURL) {
-        await updateProfile(currentUser, {
+      if (
+        normalizedName !== (currentUser.displayName ?? "") ||
+        authSafePhotoURL !== currentUser.photoURL
+      ) {
+        const updateInput: Parameters<typeof updateProfile>[1] = {
           displayName: normalizedName,
-          photoURL: photoURL ?? undefined,
-        });
+        };
+        if (authSafePhotoURL) {
+          updateInput.photoURL = authSafePhotoURL;
+        }
+        await updateProfile(currentUser, updateInput);
       }
 
-      if (normalizedEmail !== (currentUser.email ?? "")) {
-        await updateEmail(currentUser, normalizedEmail);
+      const wantsPasswordChange =
+        Boolean(currentPassword?.trim()) || Boolean(newPassword?.trim());
+      if (wantsPasswordChange) {
+        const normalizedCurrentPassword = currentPassword?.trim() ?? "";
+        const normalizedNewPassword = newPassword?.trim() ?? "";
+
+        if (!normalizedCurrentPassword || !normalizedNewPassword) {
+          throw new Error("Enter your current password and a new password.");
+        }
+        if (normalizedNewPassword.length < 8) {
+          throw new Error("New password must be at least 8 characters.");
+        }
+
+        const email = currentUser.email;
+        if (!email) {
+          throw new Error("No email is linked to this account.");
+        }
+
+        const credential = EmailAuthProvider.credential(
+          email,
+          normalizedCurrentPassword,
+        );
+        await reauthenticateWithCredential(currentUser, credential);
+        await updatePassword(currentUser, normalizedNewPassword);
       }
 
-      await updateUserProfileDoc(currentUser.uid, {
+      const updateInput: Parameters<typeof updateUserProfileDoc>[1] = {
         displayName: normalizedName,
-        email: normalizedEmail,
-        photoURL: photoURL ?? undefined,
-      });
+        email: currentUser.email ?? profile?.email ?? "",
+      };
+      if (photoURL) {
+        updateInput.photoURL = photoURL;
+      }
+      await updateUserProfileDoc(currentUser.uid, updateInput);
 
       await currentUser.reload();
       setUser(firebaseAuth.currentUser);

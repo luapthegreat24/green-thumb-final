@@ -2,36 +2,53 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useAuth } from "../../providers/auth-provider";
 import { P, SP, TY } from "@/constants/herbarium-theme";
+import { useAuth } from "../../providers/auth-provider";
 
-const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=256&q=60";
+const DEFAULT_AVATAR =
+  "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=256&q=60";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile, loading, updateUserProfile, logout } = useAuth();
   const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [showPasswordFields, setShowPasswordFields] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [localLoading, setLocalLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setDisplayName(profile?.displayName ?? user?.displayName ?? "");
-    setEmail(profile?.email ?? user?.email ?? "");
     setPhotoUri(profile?.photoURL ?? user?.photoURL ?? null);
   }, [profile, user]);
+
+  const wantsPasswordChange = useMemo(
+    () => Boolean(currentPassword.trim()) || Boolean(newPassword.trim()) || Boolean(confirmPassword.trim()),
+    [currentPassword, newPassword, confirmPassword],
+  );
 
   const hasChanges = useMemo(() => {
     return (
       displayName.trim() !== (user?.displayName ?? "") ||
-      email.trim() !== (user?.email ?? "") ||
-      photoUri !== (user?.photoURL ?? null)
+      photoUri !== (user?.photoURL ?? null) ||
+      (showPasswordFields && wantsPasswordChange)
     );
-  }, [displayName, email, photoUri, user]);
+  }, [displayName, photoUri, user, wantsPasswordChange, showPasswordFields]);
 
   const pickPhoto = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -44,16 +61,37 @@ export default function ProfileScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
+      base64: Platform.OS === "web",
       quality: 0.9,
     });
 
     if (!result.canceled) {
-      setPhotoUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      if (asset.base64) {
+        setPhotoUri(`data:image/jpeg;base64,${asset.base64}`);
+      } else {
+        setPhotoUri(asset.uri);
+      }
     }
   };
 
   const onSave = async () => {
     if (!user) return;
+
+    if (showPasswordFields && wantsPasswordChange) {
+      if (!currentPassword.trim() || !newPassword.trim() || !confirmPassword.trim()) {
+        setMessage("Fill in current password, new password, and confirm password.");
+        return;
+      }
+      if (newPassword.trim().length < 8) {
+        setMessage("New password must be at least 8 characters.");
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setMessage("New password and confirm password do not match.");
+        return;
+      }
+    }
 
     setLocalLoading(true);
     setMessage(null);
@@ -61,12 +99,24 @@ export default function ProfileScreen() {
     try {
       await updateUserProfile({
         displayName,
-        email,
         photoUri,
+        currentPassword:
+          showPasswordFields && wantsPasswordChange
+            ? currentPassword
+            : undefined,
+        newPassword:
+          showPasswordFields && wantsPasswordChange ? newPassword : undefined,
       });
+
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowPasswordFields(false);
       setMessage("Profile updated.");
     } catch (caught) {
-      setMessage(caught instanceof Error ? caught.message : "Unable to update profile.");
+      setMessage(
+        caught instanceof Error ? caught.message : "Unable to update profile.",
+      );
     } finally {
       setLocalLoading(false);
     }
@@ -95,15 +145,26 @@ export default function ProfileScreen() {
       <View style={styles.hero}>
         <Text style={styles.eyebrow}>User Profile</Text>
         <Text style={styles.title}>Your account</Text>
-        <Text style={styles.subtitle}>Edit your account details, update your photo, and sign out when needed.</Text>
+        <Text style={styles.subtitle}>
+          Edit your account details, update your photo, and sign out when
+          needed.
+        </Text>
       </View>
 
       <View style={styles.card}>
         <View style={styles.avatarRow}>
-          <Image source={{ uri: photoUri ?? DEFAULT_AVATAR }} style={styles.avatar} contentFit="cover" />
+          <Image
+            source={{ uri: photoUri ?? DEFAULT_AVATAR }}
+            style={styles.avatar}
+            contentFit="cover"
+          />
           <View style={{ flex: 1, gap: 4 }}>
-            <Text style={styles.profileName}>{profile?.displayName || user?.displayName || "Unnamed user"}</Text>
-            <Text style={styles.profileEmail}>{profile?.email || user?.email || "No email"}</Text>
+            <Text style={styles.profileName}>
+              {profile?.displayName || user?.displayName || "Unnamed user"}
+            </Text>
+            <Text style={styles.profileEmail}>
+              {profile?.email || user?.email || "No email"}
+            </Text>
           </View>
         </View>
 
@@ -114,21 +175,97 @@ export default function ProfileScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>Name</Text>
-          <TextInput value={displayName} onChangeText={setDisplayName} placeholder="Your display name" placeholderTextColor={P.i3} style={styles.input} />
+          <TextInput
+            value={displayName}
+            onChangeText={setDisplayName}
+            placeholder="Your display name"
+            placeholderTextColor={P.i3}
+            style={styles.input}
+          />
         </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput value={email} onChangeText={setEmail} placeholder="you@example.com" placeholderTextColor={P.i3} keyboardType="email-address" autoCapitalize="none" style={styles.input} />
-        </View>
+        {!showPasswordFields ? (
+          <Pressable
+            onPress={() => setShowPasswordFields(true)}
+            style={styles.secondaryButton}
+          >
+            <Text style={styles.secondaryButtonText}>Change password</Text>
+          </Pressable>
+        ) : (
+          <>
+            <View style={styles.field}>
+              <Text style={styles.label}>Current Password</Text>
+              <TextInput
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                placeholder="Enter current password"
+                placeholderTextColor={P.i3}
+                secureTextEntry
+                style={styles.input}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>New Password</Text>
+              <TextInput
+                value={newPassword}
+                onChangeText={setNewPassword}
+                placeholder="At least 8 characters"
+                placeholderTextColor={P.i3}
+                secureTextEntry
+                style={styles.input}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Confirm New Password</Text>
+              <TextInput
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="Re-enter new password"
+                placeholderTextColor={P.i3}
+                secureTextEntry
+                style={styles.input}
+              />
+            </View>
+
+            <Pressable
+              onPress={() => {
+                setShowPasswordFields(false);
+                setCurrentPassword("");
+                setNewPassword("");
+                setConfirmPassword("");
+              }}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>Cancel password change</Text>
+            </Pressable>
+          </>
+        )}
 
         {message && <Text style={styles.message}>{message}</Text>}
 
-        <Pressable onPress={onSave} disabled={!hasChanges || localLoading || loading} style={({ pressed }) => [styles.primaryButton, (!hasChanges || localLoading || loading) && styles.disabledButton, pressed && styles.pressedButton]}>
-          {localLoading || loading ? <ActivityIndicator color={P.p0} /> : <Text style={styles.primaryButtonText}>Save changes</Text>}
+        <Pressable
+          onPress={onSave}
+          disabled={!hasChanges || localLoading || loading}
+          style={({ pressed }) => [
+            styles.primaryButton,
+            (!hasChanges || localLoading || loading) && styles.disabledButton,
+            pressed && styles.pressedButton,
+          ]}
+        >
+          {localLoading || loading ? (
+            <ActivityIndicator color={P.p0} />
+          ) : (
+            <Text style={styles.primaryButtonText}>Save changes</Text>
+          )}
         </Pressable>
 
-        <Pressable onPress={onLogout} disabled={localLoading || loading} style={styles.logoutButton}>
+        <Pressable
+          onPress={onLogout}
+          disabled={localLoading || loading}
+          style={styles.logoutButton}
+        >
           <Text style={styles.logoutButtonText}>Log out</Text>
         </Pressable>
       </View>
@@ -199,6 +336,20 @@ const styles = StyleSheet.create({
     ...TY.body,
     fontWeight: "700",
     color: P.g0,
+  },
+  secondaryButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: P.sketch,
+    borderRadius: 14,
+    backgroundColor: P.p2,
+    paddingVertical: 12,
+  },
+  secondaryButtonText: {
+    ...TY.body,
+    color: P.i1,
+    fontWeight: "700",
   },
   field: {
     gap: 8,
