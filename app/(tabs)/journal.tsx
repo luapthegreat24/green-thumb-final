@@ -1,991 +1,1127 @@
-/**
- * JournalScreen — Herbarium
- *
- * Design language: "Pressed Specimen" — exact match to Dashboard + Profile.
- *
- * Structural decisions:
- *   • Masthead: same datestamp / rule / big title / rule / stat-trio as Dashboard
- *   • Quick actions: horizontal icon-chips for instant task creation
- *   • Task list: grouped into today/upcoming/missed/completed sections
- *   • Composer: expands inline beneath a rule, no modal
- *   • Tips: quiet footnote card at the bottom — plain rules, no colour fill
- *   • Zero emoji — Ionicons only
- *   • All type lowercase monospace headers
- */
-
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
-  Easing,
+  Modal,
   Pressable,
-  RefreshControl,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { TaskForm, type TaskFormValues } from "@/components/tasks/task-form";
-import { TaskListItem } from "@/components/tasks/task-list-item";
-import { AppToast } from "@/components/ui/app-toast";
-import { SP, TY } from "@/constants/herbarium-theme";
-import { useAuth } from "@/providers/auth-provider";
-import { useCareTasks } from "@/providers/care-tasks-provider";
-import { useGarden } from "@/providers/garden-provider";
-import {
-  getDefaultTaskTitle,
-  type CareTask,
-  type TaskType,
-} from "@/types/care-task";
+type TaskType = "watering" | "fertilizing" | "pruning" | "repotting" | "note";
+type TaskStatus = "pending" | "completed";
+type Frequency = "once" | "daily" | "weekly" | "monthly";
 
-// ─── Design tokens — identical to Dashboard & Profile ────────────────────────
+type ScheduleItem = {
+  id: string;
+  plantName: string;
+  title: string;
+  taskType: TaskType;
+  dateKey: string; // yyyy-mm-dd
+  time: string; // HH:mm
+  frequency: Frequency;
+  status: TaskStatus;
+  notes?: string;
+};
 
-const D = {
-  paper: "#F7F4EF",
-  paperMid: "#EDE8DF",
-  paperRule: "#D8D0C4",
-  white: "#FFFFFF",
-
-  forest: "#2A5C3F",
+const C = {
+  paper: "#FAF9F7",
+  card: "#FFFFFF",
+  border: "#EBE4DC",
+  muted: "#8A9585",
+  text: "#0F1410",
+  green: "#2D6344",
   sage: "#5C8B6E",
-  mist: "#C5D9CC",
-  leafBg: "#EBF2ED",
-
-  terracotta: "#C4623A",
-  terracottaSoft: "#F0E0D8",
   amber: "#B87A2A",
-  amberSoft: "#F2E8D5",
+  terracotta: "#C4623A",
+  leafBg: "#F0F7F2",
+  rowBorder: "#F5F0EB",
+  offWhite: "#FEFDFB",
+  accentGreen: "#3A7C52",
+};
 
-  inkDark: "#1C2318",
-  inkMid: "#4A5544",
-  inkFaint: "#8A9585",
+const TASK_STYLE: Record<
+  TaskType,
+  { icon: keyof typeof Ionicons.glyphMap; color: string; label: string }
+> = {
+  watering: { icon: "water-outline", color: C.accentGreen, label: "Watering" },
+  fertilizing: { icon: "flask-outline", color: C.amber, label: "Fertilizing" },
+  pruning: { icon: "cut-outline", color: C.sage, label: "Pruning" },
+  repotting: { icon: "cube-outline", color: C.terracotta, label: "Repotting" },
+  note: { icon: "create-outline", color: C.muted, label: "Note" },
+};
 
-  rule: "#C8C0B4",
-  paperRuleLight: "#E8E2D8",
+const TASK_TYPES: TaskType[] = [
+  "watering",
+  "fertilizing",
+  "pruning",
+  "repotting",
+  "note",
+];
+const FREQUENCIES: Frequency[] = ["once", "daily", "weekly", "monthly"];
+const FREQUENCIES_DISPLAY: Record<Frequency, string> = {
+  once: "Once",
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly",
+};
+const WEEK_CHIP_WIDTH = 92;
+const WEEK_CHIP_GAP = 10;
+const WEEK_SNAP = WEEK_CHIP_WIDTH + WEEK_CHIP_GAP;
 
-  r: { sm: 6, md: 12, lg: 20, pill: 999 },
-} as const;
+function buildWeekDays() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-// ─── Animation hooks ──────────────────────────────────────────────────────────
-
-function useFadeUp(delay = 0) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(20)).current;
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 520,
-        delay,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 520,
-        delay,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
-  return { opacity, transform: [{ translateY }] };
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    return {
+      key,
+      dayNum: d.getDate(),
+      dayShort: d
+        .toLocaleDateString("en-US", { weekday: "short" })
+        .toLowerCase(),
+      label: d
+        .toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+        })
+        .toLowerCase(),
+    };
+  });
 }
 
-function usePressScale(to = 0.965) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const cfg = { useNativeDriver: true, speed: 60, bounciness: 4 } as const;
-  return {
-    scale,
-    onPressIn: () => Animated.spring(scale, { toValue: to, ...cfg }).start(),
-    onPressOut: () => Animated.spring(scale, { toValue: 1, ...cfg }).start(),
-  };
+function prettyTime(time24: string) {
+  const [h, m] = time24.split(":").map(Number);
+  const suffix = h >= 12 ? "pm" : "am";
+  const hour12 = h % 12 || 12;
+  return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
-// ─── Atoms ────────────────────────────────────────────────────────────────────
-
-function Rule({ style }: { style?: object }) {
-  return <View style={[{ height: 1, backgroundColor: D.rule }, style]} />;
+function seedTasks(week: ReturnType<typeof buildWeekDays>): ScheduleItem[] {
+  return [
+    {
+      id: "t1",
+      plantName: "Monstera",
+      title: "Water the monstera",
+      taskType: "watering",
+      dateKey: week[0].key,
+      time: "08:30",
+      frequency: "weekly",
+      status: "pending",
+    },
+    {
+      id: "t2",
+      plantName: "Snake plant",
+      title: "Light feed",
+      taskType: "fertilizing",
+      dateKey: week[1].key,
+      time: "10:00",
+      frequency: "monthly",
+      status: "pending",
+    },
+    {
+      id: "t3",
+      plantName: "Pothos",
+      title: "Trim long vines",
+      taskType: "pruning",
+      dateKey: week[0].key,
+      time: "14:15",
+      frequency: "once",
+      status: "completed",
+    },
+  ];
 }
-
-function Mono({
-  children,
-  style,
-}: {
-  children: React.ReactNode;
-  style?: object;
-}) {
-  return <Text style={[S.mono, style]}>{children}</Text>;
-}
-
-// ─── Stat cell — identical structure to Dashboard masthead ────────────────────
-
-function StatCell({
-  value,
-  label,
-  accent = false,
-  delay = 0,
-}: {
-  value: string;
-  label: string;
-  accent?: boolean;
-  delay?: number;
-}) {
-  const anim = useFadeUp(delay);
-  return (
-    <Animated.View style={[S.statCell, anim]}>
-      <Text style={[S.statValue, accent && { color: D.terracotta }]}>
-        {value}
-      </Text>
-      <Mono style={accent ? { color: D.terracotta } : undefined}>{label}</Mono>
-    </Animated.View>
-  );
-}
-
-// ─── Quick action chip ────────────────────────────────────────────────────────
-
-const ACTION_CFG = [
-  {
-    icon: "water-outline",
-    label: "water",
-    taskType: "watering" as TaskType,
-    color: D.forest,
-    bg: D.leafBg,
-  },
-  {
-    icon: "flask-outline",
-    label: "fertilise",
-    taskType: "fertilizing" as TaskType,
-    color: D.amber,
-    bg: D.amberSoft,
-  },
-  {
-    icon: "cut-outline",
-    label: "prune",
-    taskType: "pruning" as TaskType,
-    color: D.inkMid,
-    bg: D.paperMid,
-  },
-  {
-    icon: "create-outline",
-    label: "note",
-    taskType: "note" as TaskType,
-    color: D.sage,
-    bg: D.leafBg,
-  },
-] as const;
-
-function ActionChip({
-  icon,
-  label,
-  color,
-  bg,
-  onPress,
-  onLongPress,
-}: {
-  icon: string;
-  label: string;
-  color: string;
-  bg: string;
-  onPress: () => void;
-  onLongPress?: () => void;
-}) {
-  const { scale, onPressIn, onPressOut } = usePressScale(0.94);
-  return (
-    <Pressable
-      onPress={onPress}
-      onLongPress={onLongPress}
-      delayLongPress={220}
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
-    >
-      <Animated.View style={[S.actionChip, { transform: [{ scale }] }]}>
-        <View style={[S.actionChipIcon, { backgroundColor: bg }]}>
-          <Ionicons name={icon as any} size={16} color={color} />
-        </View>
-        <Mono style={{ color: D.inkMid }}>{label}</Mono>
-      </Animated.View>
-    </Pressable>
-  );
-}
-
-// ─── Care tip row ─────────────────────────────────────────────────────────────
-
-const TIPS = [
-  { icon: "water-outline", text: "Water when soil is dry 1–2 inches deep" },
-  { icon: "sync-outline", text: "Rotate plants monthly for even growth" },
-  {
-    icon: "sunny-outline",
-    text: "Most plants need 6+ hours of indirect light",
-  },
-  { icon: "thermometer-outline", text: "Keep temperatures between 16–24°C" },
-] as const;
-
-function TipRow({
-  icon,
-  text,
-  last,
-}: {
-  icon: string;
-  text: string;
-  last?: boolean;
-}) {
-  return (
-    <View style={[S.tipRow, last && { borderBottomWidth: 0 }]}>
-      <View style={S.tipIcon}>
-        <Ionicons name={icon as any} size={13} color={D.sage} />
-      </View>
-      <Text style={S.tipText}>{text}</Text>
-    </View>
-  );
-}
-
-// ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function JournalScreen() {
-  const insets = useSafeAreaInsets();
-  const { profile } = useAuth();
-  const { plants } = useGarden();
-  const { tasks, loading, error, refresh, addTask, updateTask } =
-    useCareTasks();
+  const router = useRouter();
+  const week = useMemo(() => buildWeekDays(), []);
+  const weekScrollX = useRef(new Animated.Value(0)).current;
+  const weekScrollRef = useRef<ScrollView>(null);
+  const mainScrollRef = useRef<ScrollView>(null);
+  const formRef = useRef<View>(null);
+  const formOpacity = useRef(new Animated.Value(0)).current;
+  const tasksOpacity = useRef(new Animated.Value(0)).current;
+  const taskAnimations = useRef<Animated.Value[]>([]);
+  const [formYPosition, setFormYPosition] = useState(0);
+  const [selectedDate, setSelectedDate] = useState(week[0].key);
+  const [tasks, setTasks] = useState<ScheduleItem[]>(() => seedTasks(week));
+  const [showForm, setShowForm] = useState(false);
 
-  const [composerOpen, setComposerOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<CareTask | null>(null);
-  const [composerTaskType, setComposerTaskType] =
-    useState<TaskType>("watering");
-  const [quickCreating, setQuickCreating] = useState<TaskType | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [toastVisible, setToastVisible] = useState(false);
-  const [toastNonce, setToastNonce] = useState(0);
+  const [plantName, setPlantName] = useState("");
+  const [title, setTitle] = useState("");
+  const [taskType, setTaskType] = useState<TaskType>("watering");
+  const [time, setTime] = useState("09:00");
+  const [frequency, setFrequency] = useState<Frequency>("once");
+  const [notes, setNotes] = useState("");
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [pickerDate, setPickerDate] = useState(new Date(2025, 0, 1, 9, 0));
 
-  const firstName = profile?.displayName?.split(" ")[0]?.toLowerCase() ?? "my";
-  const journalTitle = `${firstName}'s journal`;
+  const selectedLabel =
+    week.find((d) => d.key === selectedDate)?.label ?? "today";
 
-  const dateLabel = new Date()
-    .toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-    })
-    .toLowerCase();
-
-  const stats = useMemo(
-    () => ({
-      total: tasks.length,
-      upcoming: tasks.filter((t) => t.status === "pending").length,
-      completed: tasks.filter((t) => t.status === "completed").length,
-      missed: tasks.filter((t) => t.status === "missed").length,
-    }),
-    [tasks],
-  );
-
-  const grouped = useMemo(() => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const tomorrowStart = new Date(todayStart);
-    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-
-    const today: CareTask[] = [];
-    const upcoming: CareTask[] = [];
-    const completed: CareTask[] = [];
-    const missed: CareTask[] = [];
-
-    tasks.forEach((task) => {
-      const dueAt = task.dateTime.getTime();
-      if (task.status === "completed") {
-        completed.push(task);
-        return;
-      }
-      if (task.status === "missed") {
-        missed.push(task);
-        return;
-      }
-
-      if (dueAt < tomorrowStart.getTime()) {
-        today.push(task);
-      } else {
-        upcoming.push(task);
-      }
-    });
-
-    const byDateAsc = (a: CareTask, b: CareTask) =>
-      a.dateTime.getTime() - b.dateTime.getTime();
-    const byDateDesc = (a: CareTask, b: CareTask) =>
-      b.dateTime.getTime() - a.dateTime.getTime();
-
-    return {
-      today: today.sort(byDateAsc),
-      upcoming: upcoming.sort(byDateAsc),
-      completed: completed.sort(byDateDesc),
-      missed: missed.sort(byDateAsc),
-    };
+  const taskCountByDay = useMemo(() => {
+    return tasks.reduce<Record<string, number>>((acc, task) => {
+      acc[task.dateKey] = (acc[task.dateKey] ?? 0) + 1;
+      return acc;
+    }, {});
   }, [tasks]);
 
-  const preferredPlant = useMemo(() => {
-    if (plants.length === 0) return null;
+  const tasksForDay = useMemo(
+    () =>
+      tasks
+        .filter((t) => t.dateKey === selectedDate)
+        .sort((a, b) => a.time.localeCompare(b.time)),
+    [selectedDate, tasks],
+  );
 
-    if (editingTask) {
-      return (
-        plants.find((plant) => plant.id === editingTask.plantId) ?? plants[0]
-      );
-    }
+  const totalPending = tasks.filter((t) => t.status === "pending").length;
+  const totalDone = tasks.filter((t) => t.status === "completed").length;
 
-    if (tasks.length > 0) {
-      const latestTask = tasks.reduce((latest, current) =>
-        current.updatedAt.getTime() > latest.updatedAt.getTime()
-          ? current
-          : latest,
-      );
-      return (
-        plants.find((plant) => plant.id === latestTask.plantId) ?? plants[0]
-      );
-    }
+  const addTask = () => {
+    if (!plantName.trim() || !title.trim()) return;
 
-    return plants[0];
-  }, [editingTask, plants, tasks]);
-
-  const showToast = (message: string) => {
-    setToastMessage(message);
-    setToastNonce((current) => current + 1);
-    setToastVisible(true);
-  };
-
-  const buildQuickTaskDate = (taskType: TaskType) => {
-    const date = new Date();
-    if (taskType === "fertilizing" || taskType === "pruning") {
-      date.setDate(date.getDate() + 1);
-      date.setHours(9, 0, 0, 0);
-      return date;
-    }
-
-    if (taskType === "note") {
-      date.setMinutes(0, 0, 0);
-      return date;
-    }
-
-    date.setHours(date.getHours() + 1, 0, 0, 0);
-    return date;
-  };
-
-  const quickCreateTask = async (taskType: TaskType) => {
-    if (quickCreating) return;
-
-    const plant = preferredPlant;
-    if (!plant) {
-      showToast("Add a plant first to create care tasks");
-      return;
-    }
-
-    try {
-      setQuickCreating(taskType);
-      await addTask({
-        plantId: plant.id,
-        plantName: plant.name,
+    setTasks((prev) => [
+      ...prev,
+      {
+        id: String(Date.now()),
+        plantName: plantName.trim(),
+        title: title.trim(),
         taskType,
-        title: getDefaultTaskTitle(taskType, plant.name),
-        dateTime: buildQuickTaskDate(taskType),
-        isRecurring: false,
-        reminderEnabled: false,
-      });
-      showToast("Task added");
-    } catch {
-      showToast("Could not add task");
-    } finally {
-      setQuickCreating(null);
+        dateKey: selectedDate,
+        time,
+        frequency,
+        status: "pending",
+        notes: notes.trim() || undefined,
+      },
+    ]);
+
+    setPlantName("");
+    setTitle("");
+    setTaskType("watering");
+    setTime("09:00");
+    setFrequency("once");
+    setNotes("");
+    setShowForm(false);
+  };
+
+  const toggleStatus = (id: string) => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              status: t.status === "pending" ? "completed" : "pending",
+            }
+          : t,
+      ),
+    );
+  };
+
+  const removeTask = (id: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const openTimePicker = () => {
+    const [h, m] = time.split(":").map(Number);
+    const newDate = new Date(2025, 0, 1, h, m);
+    setPickerDate(newDate);
+    setShowTimePicker(true);
+  };
+
+  const confirmTime = () => {
+    const hours = String(pickerDate.getHours()).padStart(2, "0");
+    const minutes = String(pickerDate.getMinutes()).padStart(2, "0");
+    setTime(`${hours}:${minutes}`);
+    setShowTimePicker(false);
+  };
+
+  const handleTimeChange = (event: any, selectedDate?: Date) => {
+    if (selectedDate) {
+      setPickerDate(selectedDate);
     }
   };
 
-  const closeComposer = () => {
-    setComposerOpen(false);
-    setEditingTask(null);
+  const formatTimeDisplay = (h: number, m: number) => {
+    const suffix = h >= 12 ? "pm" : "am";
+    const hour12 = h % 12 || 12;
+    return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
   };
 
-  const openComposer = (taskType: TaskType = "watering") => {
-    setComposerTaskType(taskType);
-    setEditingTask(null);
-    setComposerOpen(true);
-  };
+  useEffect(() => {
+    Animated.timing(formOpacity, {
+      toValue: showForm ? 1 : 0,
+      duration: 350,
+      useNativeDriver: true,
+    }).start();
 
-  const startEdit = (task: CareTask) => {
-    setComposerTaskType(task.taskType);
-    setEditingTask(task);
-    setComposerOpen(true);
-  };
-
-  const handleSubmit = async (values: TaskFormValues) => {
-    try {
-      if (editingTask) {
-        await updateTask(editingTask.id, {
-          plantId: values.plantId,
-          plantName: values.plantName,
-          taskType: values.taskType,
-          title: values.title,
-          dateTime: values.dateTime,
-          isRecurring: values.isRecurring,
-          frequency: values.frequency,
-          notes: values.notes,
-          reminderEnabled: values.reminderEnabled,
+    if (showForm && formYPosition > 0) {
+      setTimeout(() => {
+        mainScrollRef.current?.scrollTo({
+          y: formYPosition - 100,
+          animated: true,
         });
-        showToast("Task updated");
-      } else {
-        await addTask(values);
-        showToast("Task created");
-      }
-      closeComposer();
-    } catch {
-      showToast("Could not save task");
+      }, 100);
+    }
+  }, [showForm, formYPosition]);
+
+  useEffect(() => {
+    taskAnimations.current = tasksForDay.map(() => new Animated.Value(0));
+    
+    Animated.sequence([
+      Animated.timing(tasksOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.stagger(
+        60,
+        taskAnimations.current.map((anim: Animated.Value) =>
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          })
+        )
+      ),
+    ]).start();
+
+    return () => {
+      tasksOpacity.setValue(0);
+      taskAnimations.current.forEach((anim: Animated.Value) => anim.setValue(0));
+    };
+  }, [tasksForDay]);
+
+  const scrollToForm = () => {
+    if (formYPosition > 0) {
+      mainScrollRef.current?.scrollTo({
+        y: Math.max(0, formYPosition - 100),
+        animated: true,
+      });
     }
   };
-
-  // Add-task button press scale
-  const {
-    scale: addScale,
-    onPressIn: addPressIn,
-    onPressOut: addPressOut,
-  } = usePressScale();
-
-  // Keep animation hooks stable across renders.
-  const mastheadAnim = useFadeUp(0);
-  const actionsAnim = useFadeUp(80);
-  const composerAnim = useFadeUp(0);
-  const sectionsAnim = useFadeUp(160);
-  const tasksAnimDefault = useFadeUp(200);
-  const tasksAnimWithComposer = useFadeUp(280);
-  const errorAnim = useFadeUp(0);
-  const tipsAnim = useFadeUp(400);
-  const footerAnim = useFadeUp(480);
 
   return (
-    <View style={S.screen}>
+    <SafeAreaView style={S.screen}>
       <ScrollView
-        style={S.screen}
-        contentContainerStyle={[
-          S.scroll,
-          {
-            paddingTop: insets.top + SP.sm,
-            paddingBottom: insets.bottom + SP.xxxl + 92,
-          },
-        ]}
-        refreshControl={
-          <RefreshControl
-            refreshing={loading && tasks.length === 0}
-            onRefresh={refresh}
-            tintColor={D.forest}
-          />
-        }
+        ref={mainScrollRef}
+        contentContainerStyle={S.content}
+        showsVerticalScrollIndicator={false}
       >
-        {/* ══════════════════════════════════════════════════
-          1. MASTHEAD — same editorial structure as Dashboard
-          datestamp / rule / big title / rule / stat trio
-      ══════════════════════════════════════════════════ */}
-        <Animated.View style={[S.card, mastheadAnim]}>
-          {/* Datestamp row */}
-          <View style={S.mastheadTopRow}>
-            <Mono>{dateLabel}</Mono>
-            {/* Add task chip — top right, mirrors dashboard's leaf count */}
-            <Pressable
-              onPress={() => openComposer()}
-              onPressIn={addPressIn}
-              onPressOut={addPressOut}
-            >
-              <Animated.View
-                style={[S.addChip, { transform: [{ scale: addScale }] }]}
-              >
-                <Ionicons name="add" size={12} color={D.forest} />
-                <Mono style={{ color: D.forest }}>new task</Mono>
-              </Animated.View>
+        <View style={S.card}>
+          <Text style={S.mono}>
+            {new Date()
+              .toLocaleDateString("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })
+              .toLowerCase()}
+          </Text>
+          <View style={S.rule} />
+          <Text style={S.headerTitle}>Care Schedule</Text>
+          <Text style={S.headerSub}>Frontend Only Preview</Text>
+          <View style={S.rule} />
+
+          <View style={S.statsRow}>
+            <View style={S.statCell}>
+              <Text style={S.statValue}>{tasks.length}</Text>
+              <Text style={S.mono}>Total</Text>
+            </View>
+            <View style={S.statDivider} />
+            <View style={S.statCell}>
+              <Text style={S.statValue}>{totalPending}</Text>
+              <Text style={S.mono}>Pending</Text>
+            </View>
+            <View style={S.statDivider} />
+            <View style={S.statCell}>
+              <Text style={[S.statValue, { color: C.green }]}>{totalDone}</Text>
+              <Text style={S.mono}>Done</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={S.card}>
+          <View style={S.rowBetween}>
+            <View>
+              <Text style={S.sectionTitle}>Week View</Text>
+              <Text style={S.sectionHint}>Tap any day to load tasks</Text>
+            </View>
+            <Pressable onPress={() => setShowForm((v) => !v)} style={S.addBtn}>
+              <View style={S.addBtnIconWrap}>
+                <Ionicons
+                  name={showForm ? "close" : "add"}
+                  size={12}
+                  color={C.green}
+                />
+              </View>
+              <Text style={[S.mono, { color: C.green }]}>
+                {showForm ? "Close" : "Add Task"}
+              </Text>
             </Pressable>
           </View>
+          <View style={S.rule} />
 
-          <Rule />
-
-          {/* Journal title — same SpaceMono display type as name in Dashboard */}
-          <View style={S.mastheadBody}>
-            <Mono>care journal</Mono>
-            <Text style={S.mastheadTitle}>{journalTitle}</Text>
-          </View>
-
-          <Rule />
-
-          {/* Stat trio — identical layout to Dashboard */}
-          <View style={S.statRow}>
-            <StatCell value={String(stats.total)} label="total" delay={60} />
-            <View style={S.statDivider} />
-            <StatCell
-              value={String(stats.upcoming)}
-              label="upcoming"
-              delay={130}
-            />
-            <View style={S.statDivider} />
-            <StatCell
-              value={String(stats.completed)}
-              label="done"
-              delay={200}
-            />
-            <View style={S.statDivider} />
-            <StatCell
-              value={String(stats.missed)}
-              label="missed"
-              accent={stats.missed > 0}
-              delay={270}
-            />
-          </View>
-        </Animated.View>
-
-        {/* ══════════════════════════════════════════════════
-          2. QUICK ACTIONS — horizontal scrolling chips
-          Each chip: coloured icon bubble + mono label
-      ══════════════════════════════════════════════════ */}
-        <Animated.View style={[S.card, actionsAnim]}>
-          <View style={S.sectionHead}>
-            <Text style={S.sectionTitle}>quick actions</Text>
-            <Mono>tap to add · hold to customize</Mono>
-          </View>
-          <Rule />
-          <ScrollView
+          <Animated.ScrollView
+            ref={weekScrollRef}
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={S.actionChipsRow}
+            contentContainerStyle={S.weekRow}
+            snapToInterval={WEEK_SNAP}
+            decelerationRate={0.88}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { x: weekScrollX } } }],
+              { useNativeDriver: true },
+            )}
+            scrollEventThrottle={8}
           >
-            {ACTION_CFG.map((a) => (
-              <ActionChip
-                key={a.taskType}
-                icon={a.icon}
-                label={a.label}
-                color={a.color}
-                bg={quickCreating === a.taskType ? D.paperMid : a.bg}
-                onPress={() => quickCreateTask(a.taskType)}
-                onLongPress={() => openComposer(a.taskType)}
-              />
-            ))}
-          </ScrollView>
-        </Animated.View>
+            {week.map((day, index) => {
+              const cellWidthWithGap = WEEK_SNAP;
+              const center = index * cellWidthWithGap;
+              const inputRange = [
+                center - cellWidthWithGap * 2.5,
+                center,
+                center + cellWidthWithGap * 2.5,
+              ];
+              const active = day.key === selectedDate;
+              const count = taskCountByDay[day.key] ?? 0;
+              const isToday = day.key === week[0].key;
+              const animatedScale = weekScrollX.interpolate({
+                inputRange,
+                outputRange: [0.98, 1, 0.98],
+                extrapolate: "clamp",
+              });
+              const animatedOpacity = weekScrollX.interpolate({
+                inputRange,
+                outputRange: [0.85, 1, 0.85],
+                extrapolate: "clamp",
+              });
+              const animatedLift = weekScrollX.interpolate({
+                inputRange,
+                outputRange: [1.5, 0, 1.5],
+                extrapolate: "clamp",
+              });
 
-        {/* ══════════════════════════════════════════════════
-          3. COMPOSER — inline expansion
-          Appears between actions and task list when open.
-          Same card shell, ruled header.
-      ══════════════════════════════════════════════════ */}
-        {composerOpen && (
-          <Animated.View style={[S.card, composerAnim]}>
-            <View style={S.sectionHead}>
-              <Text style={S.sectionTitle}>
-                {editingTask ? "edit task" : "new task"}
-              </Text>
-              {/* Close button — top right */}
-              <Pressable onPress={closeComposer} style={S.closeBtn}>
-                <Ionicons name="close" size={14} color={D.inkFaint} />
+              return (
+                <Animated.View
+                  key={day.key}
+                  style={{
+                    transform: [
+                      { scale: animatedScale },
+                      { translateY: animatedLift },
+                    ],
+                    opacity: animatedOpacity,
+                  }}
+                >
+                  <Pressable
+                    onPress={() => {
+                      setSelectedDate(day.key);
+                    }}
+                    style={[
+                      S.dayCell,
+                      active &&
+                        (isToday ? S.dayCellTodayActive : S.dayCellActive),
+                      !active && isToday && S.dayCellToday,
+                    ]}
+                  >
+                    <View style={[S.dayAccent, active && S.dayAccentActive]} />
+                    <View style={S.dayTopRow}>
+                      <Text style={[S.dayName, active && S.dayNameActive]}>
+                        {day.dayShort}
+                      </Text>
+                      {count > 0 ? (
+                        <View
+                          style={[S.countBadge, active && S.countBadgeActive]}
+                        >
+                          <Text
+                            style={[
+                              S.countBadgeText,
+                              active && S.countBadgeTextActive,
+                            ]}
+                          >
+                            {count}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text style={[S.dayNum, active && { color: "#FFFFFF" }]}>
+                      {day.dayNum}
+                    </Text>
+                    <Text
+                      style={[
+                        S.dayBottomLabel,
+                        active && S.dayBottomLabelActive,
+                      ]}
+                    >
+                      {isToday ? "Today" : count > 0 ? "Scheduled" : "Open"}
+                    </Text>
+                  </Pressable>
+                </Animated.View>
+              );
+            })}
+          </Animated.ScrollView>
+
+          <View style={S.selectedPill}>
+            <Ionicons name="sparkles-outline" size={12} color={C.green} />
+            <Text style={S.selectedPillText}>{selectedLabel.charAt(0).toUpperCase() + selectedLabel.slice(1)}</Text>
+          </View>
+        </View>
+
+        {showForm && (
+          <Animated.View
+            ref={formRef}
+            onLayout={(e) => setFormYPosition(e.nativeEvent.layout.y)}
+            style={[S.card, { opacity: formOpacity }]}
+          >
+            <Text style={S.sectionTitle}>New Task for {selectedLabel.charAt(0).toUpperCase() + selectedLabel.slice(1)}</Text>
+            <View style={S.rule} />
+
+            <Text style={S.fieldLabel}>Plant Name</Text>
+            <TextInput
+              style={S.input}
+              value={plantName}
+              onChangeText={setPlantName}
+              placeholder="E.g. Monstera deliciosa"
+              placeholderTextColor={C.muted}
+            />
+
+            <Text style={S.fieldLabel}>Task Title</Text>
+            <TextInput
+              style={S.input}
+              value={title}
+              onChangeText={setTitle}
+              placeholder="E.g. Water thoroughly"
+              placeholderTextColor={C.muted}
+            />
+
+            <Text style={S.fieldLabel}>Task Type</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={S.chipsRow}
+            >
+              {TASK_TYPES.map((type) => {
+                const selected = type === taskType;
+                const meta = TASK_STYLE[type];
+                return (
+                  <Pressable
+                    key={type}
+                    onPress={() => setTaskType(type)}
+                    style={[
+                      S.chip,
+                      selected && {
+                        borderColor: meta.color,
+                        backgroundColor: C.leafBg,
+                      },
+                    ]}
+                  >
+                    <Ionicons name={meta.icon} size={13} color={meta.color} />
+                    <Text style={[S.mono, { color: meta.color }]}>
+                      {meta.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <View style={S.twoCol}>
+              <View style={{ flex: 1 }}>
+                <Text style={S.fieldLabel}>Time</Text>
+                <Pressable onPress={openTimePicker} style={S.timePickerButton}>
+                  <Ionicons
+                    name="time-outline"
+                    size={16}
+                    color={C.accentGreen}
+                  />
+                  <Text style={S.timePickerText}>
+                    {(() => {
+                      const [h, m] = time.split(":").map(Number);
+                      return formatTimeDisplay(h, m);
+                    })()}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={S.fieldLabel}>Frequency</Text>
+                <View style={S.frequencyChipsWrapper}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={S.chipsRowCompact}
+                    scrollEnabled={true}
+                  >
+                    {FREQUENCIES.map((f) => {
+                      const selected = f === frequency;
+                      return (
+                        <Pressable
+                          key={f}
+                          onPress={() => setFrequency(f)}
+                          style={[S.smallChip, selected && S.smallChipActive]}
+                        >
+                          <Text
+                            style={[S.mono, selected && { color: "#FFFFFF" }]}
+                          >
+                            {FREQUENCIES_DISPLAY[f]}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              </View>
+            </View>
+
+            <Text style={S.fieldLabel}>Notes (Optional)</Text>
+            <TextInput
+              style={[S.input, S.inputNotes]}
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              placeholder="Any care notes..."
+              placeholderTextColor={C.muted}
+            />
+
+            <View style={S.actionsRow}>
+              <Pressable onPress={() => setShowForm(false)} style={S.ghostBtn}>
+                <Text style={S.mono}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={addTask} style={S.primaryBtn}>
+                <Text style={[S.mono, { color: "#FFFFFF" }]}>Save Task</Text>
               </Pressable>
             </View>
-            <Rule />
-            <TaskForm
-              key={editingTask?.id ?? composerTaskType}
-              task={editingTask ?? undefined}
-              initialTaskType={composerTaskType}
-              submitLabel={editingTask ? "update task" : "create task"}
-              onCancel={closeComposer}
-              onSubmit={handleSubmit}
-            />
           </Animated.View>
         )}
 
-        {/* ══════════════════════════════════════════════════
-          4. TASK LIST — sectioned by urgency
-          Mirrors care queue in Dashboard exactly.
-      ══════════════════════════════════════════════════ */}
-        <Animated.View
-          style={[
-            S.card,
-            composerOpen ? tasksAnimWithComposer : tasksAnimDefault,
-          ]}
-        >
-          <View style={S.sectionHead}>
-            <Text style={S.sectionTitle}>care tasks</Text>
-            <Mono>{tasks.length} total entries</Mono>
-          </View>
-          <Rule />
+        <View style={S.card}>
+          <Text style={S.sectionTitle}>Tasks for {selectedLabel.charAt(0).toUpperCase() + selectedLabel.slice(1)}</Text>
+          <View style={S.rule} />
 
-          {loading && tasks.length === 0 ? (
-            <View style={S.emptyState}>
-              <ActivityIndicator size="small" color={D.sage} />
-              <Mono>loading task feed…</Mono>
+          {tasksForDay.length === 0 ? (
+            <View style={S.emptyWrap}>
+              <Ionicons name="calendar-outline" size={20} color={C.muted} />
+              <Text style={S.emptyText}>No Tasks Scheduled</Text>
             </View>
-          ) : tasks.length > 0 ? (
-            <Animated.View style={[S.sectionStack, sectionsAnim]}>
-              <View style={S.taskSection}>
-                <View style={S.taskSectionHead}>
-                  <Mono style={S.taskSectionTitle}>today</Mono>
-                  <Mono>{grouped.today.length}</Mono>
-                </View>
-                {grouped.today.length > 0 ? (
-                  <View style={S.taskList}>
-                    {grouped.today.map((task, i) => (
-                      <TaskListItem
-                        key={task.id}
-                        task={task}
-                        index={i}
-                        onEdit={startEdit}
-                      />
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={S.sectionEmpty}>no tasks due today</Text>
-                )}
-              </View>
-
-              <View style={S.taskSection}>
-                <View style={S.taskSectionHead}>
-                  <Mono style={S.taskSectionTitle}>upcoming</Mono>
-                  <Mono>{grouped.upcoming.length}</Mono>
-                </View>
-                {grouped.upcoming.length > 0 ? (
-                  <View style={S.taskList}>
-                    {grouped.upcoming.map((task, i) => (
-                      <TaskListItem
-                        key={task.id}
-                        task={task}
-                        index={i}
-                        onEdit={startEdit}
-                      />
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={S.sectionEmpty}>no upcoming tasks</Text>
-                )}
-              </View>
-
-              {grouped.missed.length > 0 && (
-                <View style={S.taskSection}>
-                  <View style={S.taskSectionHead}>
-                    <Mono style={[S.taskSectionTitle, { color: D.terracotta }]}>
-                      missed
-                    </Mono>
-                    <Mono style={{ color: D.terracotta }}>
-                      {grouped.missed.length}
-                    </Mono>
-                  </View>
-                  <View style={S.taskList}>
-                    {grouped.missed.map((task, i) => (
-                      <TaskListItem
-                        key={task.id}
-                        task={task}
-                        index={i}
-                        onEdit={startEdit}
-                      />
-                    ))}
-                  </View>
-                </View>
-              )}
-
-              <View style={S.taskSection}>
-                <View style={S.taskSectionHead}>
-                  <Mono style={S.taskSectionTitle}>completed</Mono>
-                  <Mono>{grouped.completed.length}</Mono>
-                </View>
-                {grouped.completed.length > 0 ? (
-                  <View style={S.taskList}>
-                    {grouped.completed.map((task, i) => (
-                      <TaskListItem
-                        key={task.id}
-                        task={task}
-                        index={i}
-                        onEdit={startEdit}
-                      />
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={S.sectionEmpty}>nothing completed yet</Text>
-                )}
-              </View>
-            </Animated.View>
           ) : (
-            <View style={S.emptyState}>
-              <View style={S.emptyIconWrap}>
-                <Ionicons name="leaf-outline" size={22} color={D.mist} />
-              </View>
-              <Text style={S.emptyTitle}>no tasks here yet</Text>
-              <Mono>tap a quick action to add your first task</Mono>
-            </View>
+            <Animated.View style={{ opacity: tasksOpacity }}>
+              {tasksForDay.map((task, index) => {
+                const meta = TASK_STYLE[task.taskType];
+                const taskAnimValue = taskAnimations.current[index];
+                const taskTranslateY = taskAnimValue
+                  ? taskAnimValue.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0],
+                    })
+                  : new Animated.Value(0);
+                const taskOpacity = taskAnimValue
+                  ? taskAnimValue.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, 1],
+                    })
+                  : new Animated.Value(1);
+
+                return (
+                  <Animated.View
+                    key={task.id}
+                    style={[
+                      {
+                        transform: [{ translateY: taskTranslateY }],
+                        opacity: taskOpacity,
+                      },
+                    ]}
+                  >
+                    <Pressable onPress={() => router.push({ pathname: "/tasks/[id]", params: { id: task.id } })} style={S.taskRowPressable}>
+                      <View
+                        style={[
+                          S.taskRow,
+                          index === tasksForDay.length - 1 && {
+                            borderBottomWidth: 0,
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[S.leftStripe, { backgroundColor: meta.color }]}
+                        />
+
+                        <View style={[S.iconBubble, { backgroundColor: C.leafBg }]}>
+                          <Ionicons name={meta.icon} size={14} color={meta.color} />
+                        </View>
+
+                        <View style={{ flex: 1 }}>
+                          <Text style={S.taskTitle}>{task.title}</Text>
+                          <Text style={S.taskMeta}>
+                            {task.plantName} · {prettyTime(task.time)} ·{" "}
+                            {task.frequency}
+                          </Text>
+                          {task.notes ? (
+                            <Text style={S.taskNotes}>{task.notes}</Text>
+                          ) : null}
+                        </View>
+
+                        <View style={S.taskRightActions}>
+                          <Pressable
+                            onPress={() => toggleStatus(task.id)}
+                            style={S.iconBtn}
+                          >
+                            <Ionicons
+                              name={
+                                task.status === "completed"
+                                  ? "checkmark-circle"
+                                  : "ellipse-outline"
+                              }
+                              size={18}
+                              color={
+                                task.status === "completed" ? C.green : C.muted
+                              }
+                            />
+                          </Pressable>
+                          <Pressable
+                            onPress={() => removeTask(task.id)}
+                            style={S.iconBtn}
+                          >
+                            <Ionicons
+                              name="trash-outline"
+                              size={16}
+                              color={C.terracotta}
+                            />
+                          </Pressable>
+                        </View>
+                      </View>
+                    </Pressable>
+                  </Animated.View>
+                );
+              })}
+            </Animated.View>
           )}
-        </Animated.View>
-
-        {/* ══════════════════════════════════════════════════
-          6. ERROR BANNER — only when present
-      ══════════════════════════════════════════════════ */}
-        {error && (
-          <Animated.View style={[S.errorBanner, errorAnim]}>
-            <View style={S.errorPip} />
-            <Text style={S.errorText}>{error}</Text>
-          </Animated.View>
-        )}
-
-        {/* ══════════════════════════════════════════════════
-          7. CARE TIPS — quiet footnote card
-          Plain ruled rows, no green fill — subtle reference
-          matches the botanical annotation tone.
-      ══════════════════════════════════════════════════ */}
-        <Animated.View style={[S.card, tipsAnim]}>
-          <View style={S.sectionHead}>
-            <Text style={S.sectionTitle}>care notes</Text>
-            <Mono>field observations</Mono>
-          </View>
-          <Rule />
-          {TIPS.map((tip, i) => (
-            <TipRow
-              key={i}
-              icon={tip.icon}
-              text={tip.text}
-              last={i === TIPS.length - 1}
-            />
-          ))}
-        </Animated.View>
-
-        {/* Botanical footer — matches Profile */}
-        <Animated.View style={[S.footer, footerAnim]}>
-          <View style={S.footerRule} />
-          <Mono style={{ textAlign: "center" }}>
-            herbarium · care journal · {String(new Date().getFullYear())}
-          </Mono>
-        </Animated.View>
+        </View>
       </ScrollView>
 
-      <AppToast
-        key={String(toastNonce)}
-        message={toastMessage}
-        visible={toastVisible}
-        onHide={() => setToastVisible(false)}
-        bottomOffset={insets.bottom + 22}
-      />
-    </View>
+      {showTimePicker && (
+        <Modal
+          transparent={true}
+          animationType="slide"
+          visible={showTimePicker}
+        >
+          <View style={S.timePickerModalOverlay}>
+            <View style={S.timePickerModalContainer}>
+              <View style={S.timePickerModalContent}>
+                <Text style={S.timePickerModalTitle}>Select Time</Text>
+                <DateTimePicker
+                  value={pickerDate}
+                  mode="time"
+                  display="spinner"
+                  onChange={handleTimeChange}
+                  textColor={C.text}
+                  style={S.timePickerNative}
+                />
+              </View>
+              <View style={S.timePickerFooter}>
+                <Pressable
+                  onPress={() => setShowTimePicker(false)}
+                  style={S.timePickerCancelBtn}
+                >
+                  <Text style={S.timePickerCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable onPress={confirmTime} style={S.timePickerConfirm}>
+                  <Text style={S.timePickerConfirmText}>Confirm</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+    </SafeAreaView>
   );
 }
 
-// ─── Stylesheet ───────────────────────────────────────────────────────────────
-
 const S = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: D.paper },
-  scroll: { paddingHorizontal: SP.lg, gap: SP.lg },
+  screen: { flex: 1, backgroundColor: C.paper },
+  content: { paddingHorizontal: 16, paddingVertical: 16, paddingBottom: 100, gap: 18 },
 
-  // ── Mono atom
+  card: {
+    backgroundColor: C.card,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: "#C8C0B4",
+    padding: 18,
+    gap: 14,
+  },
+  rule: { height: 1, backgroundColor: "#F5F0EB" },
+
   mono: {
     fontFamily: "SpaceMono",
-    fontSize: 9,
-    letterSpacing: 0.8,
-    color: D.inkFaint,
-    textTransform: "uppercase" as const,
+    fontSize: 11,
+    color: "#97A099",
   },
 
-  // ── Card shell — identical to Dashboard & Profile
-  card: {
-    backgroundColor: D.white,
-    borderRadius: D.r.lg,
-    borderWidth: 1,
-    borderColor: D.rule,
-    padding: SP.lg,
-    gap: SP.md,
+  headerTitle: {
+    fontFamily: "SpaceMono",
+    fontSize: 34,
+    color: C.accentGreen,
+    lineHeight: 40,
+  },
+  headerSub: {
+    fontFamily: "SpaceMono",
+    fontSize: 13,
+    color: C.muted,
+    marginTop: -2,
   },
 
-  // ── Masthead
-  mastheadTopRow: {
+  statsRow: { flexDirection: "row", alignItems: "center" },
+  statCell: { flex: 1, alignItems: "center", gap: 4 },
+  statValue: { fontFamily: "SpaceMono", fontSize: 26, color: C.accentGreen },
+  statDivider: { width: 1, height: 40, backgroundColor: "#F0E9E1" },
+
+  rowBetween: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-  addChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: D.leafBg,
-    borderRadius: D.r.pill,
-    borderWidth: 1,
-    borderColor: D.mist,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  mastheadBody: { gap: 3 },
-  mastheadTitle: {
-    fontFamily: "SpaceMono",
-    fontSize: 30,
-    color: D.forest,
-    fontWeight: "400" as const,
-    letterSpacing: -0.5,
-    lineHeight: 36,
-  },
-
-  // ── Stat trio — exact copy of Dashboard
-  statRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  statCell: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-  },
-  statValue: {
-    fontFamily: "SpaceMono",
-    fontSize: 22,
-    color: D.inkDark,
-    lineHeight: 26,
-  },
-  statDivider: {
-    width: 1,
-    height: 34,
-    backgroundColor: D.rule,
-    marginHorizontal: SP.sm,
-  },
-
-  // ── Section head (matches Dashboard SectionHead)
-  sectionHead: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: SP.sm,
   },
   sectionTitle: {
     fontFamily: "SpaceMono",
-    fontSize: 14,
-    color: D.inkDark,
-    fontWeight: "400" as const,
-    letterSpacing: 0.2,
-    flex: 1,
+    fontSize: 17,
+    color: C.text,
   },
-  closeBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: D.r.pill,
-    backgroundColor: D.paperMid,
-    alignItems: "center",
-    justifyContent: "center",
+  sectionHint: {
+    fontFamily: "SpaceMono",
+    fontSize: 12,
+    color: C.muted,
+    marginTop: 2,
   },
 
-  // ── Quick action chips
-  actionChipsRow: {
+  addBtn: {
     flexDirection: "row",
-    gap: SP.md,
-    paddingRight: SP.sm,
-  },
-  actionChip: {
     alignItems: "center",
     gap: 8,
-    paddingVertical: 4,
+    backgroundColor: "#F8FAF9",
+    borderWidth: 1.2,
+    borderColor: "#E8DFD6",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  actionChipIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: D.r.md,
+  addBtnIconWrap: {
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    backgroundColor: "#EFF5F1",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: D.rule,
   },
 
-  // ── Task list — ruled rows
-  taskList: { gap: 0 },
-  sectionStack: { gap: SP.lg },
-  taskSection: { gap: SP.sm },
-  taskSectionHead: {
+  weekRow: {
+    flexDirection: "row",
+    gap: WEEK_CHIP_GAP,
+    paddingRight: 20,
+    paddingLeft: 4,
+    paddingVertical: 12,
+  },
+  dayCell: {
+    width: WEEK_CHIP_WIDTH,
+    height: 110,
+    borderRadius: 20,
+    borderWidth: 1.2,
+    borderColor: "#E8DFD6",
+    backgroundColor: C.offWhite,
+    paddingVertical: 12,
+    paddingHorizontal: 11,
+    gap: 7,
+  },
+  dayCellActive: {
+    backgroundColor: C.accentGreen,
+    borderColor: "#2A5F3A",
+  },
+  dayCellToday: {
+    borderColor: "#BFD2C4",
+    backgroundColor: "#F4F9F5",
+    height: 122,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+  dayCellTodayActive: {
+    backgroundColor: C.accentGreen,
+    borderColor: "#2A5F3A",
+    height: 122,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+  dayAccent: {
+    height: 3,
+    borderRadius: 99,
+    backgroundColor: "#E0EFE5",
+    marginBottom: 3,
+  },
+  dayAccentActive: { backgroundColor: "#F0F8F3" },
+  dayTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  taskSectionTitle: {
-    color: D.inkDark,
-  },
-  sectionEmpty: {
-    ...TY.body,
-    fontSize: 12,
-    color: D.inkFaint,
-    paddingVertical: 6,
-  },
-
-  // ── Empty state
-  emptyState: {
-    paddingVertical: SP.xl,
-    alignItems: "center",
-    gap: SP.md,
-  },
-  emptyIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: D.r.md,
-    backgroundColor: D.paperMid,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyTitle: {
+  dayName: {
     fontFamily: "SpaceMono",
-    fontSize: 15,
-    color: D.inkDark,
-    fontWeight: "400" as const,
+    fontSize: 11,
+    color: C.muted,
   },
-
-  // ── Error banner
-  errorBanner: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    backgroundColor: D.terracottaSoft,
-    borderRadius: D.r.md,
-    borderWidth: 1,
-    borderColor: "rgba(196,98,58,0.3)",
-    paddingHorizontal: SP.md,
-    paddingVertical: SP.md,
-  },
-  errorPip: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: D.terracotta,
-    marginTop: 2,
-    flexShrink: 0,
-  },
-  errorText: {
-    ...TY.body,
-    fontSize: 12,
-    color: D.terracotta,
-    flex: 1,
-  },
-
-  // ── Care tips — ruled rows
-  tipRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: SP.md,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: D.paperRuleLight,
-  },
-  tipIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: D.r.sm,
-    backgroundColor: D.leafBg,
+  dayNameActive: { color: "#DFEEE4" },
+  countBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 999,
+    paddingHorizontal: 7,
     alignItems: "center",
     justifyContent: "center",
-    flexShrink: 0,
+    backgroundColor: "#F5FBF7",
   },
-  tipText: {
-    ...TY.body,
+  countBadgeActive: { backgroundColor: "#FFFFFF" },
+  countBadgeText: {
+    fontFamily: "SpaceMono",
+    fontSize: 11,
+    color: C.accentGreen,
+    fontWeight: "600",
+  },
+  countBadgeTextActive: { color: C.green },
+  dayNum: { fontFamily: "SpaceMono", fontSize: 19, color: C.text },
+  dayBottomLabel: {
+    fontFamily: "SpaceMono",
+    fontSize: 10,
+    color: C.muted,
+  },
+  dayBottomLabelActive: { color: "#DFEEE4" },
+  selectedPill: {
+    marginTop: 14,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1.2,
+    borderColor: "#E0DDD5",
+    backgroundColor: "#F9FAFB",
+  },
+  selectedPillText: {
+    fontFamily: "SpaceMono",
     fontSize: 12,
-    color: D.inkMid,
-    lineHeight: 20,
-    flex: 1,
-    paddingTop: 4,
+    color: C.accentGreen,
   },
 
-  // ── Footer — matches Profile
-  footer: {
-    paddingTop: SP.lg,
-    paddingBottom: SP.sm,
-    alignItems: "center",
-    gap: SP.sm,
+  fieldLabel: {
+    fontFamily: "SpaceMono",
+    fontSize: 12,
+    color: C.muted,
+    marginBottom: 8,
   },
-  footerRule: {
+  input: {
+    borderWidth: 1.2,
+    borderColor: "#E8DFD6",
+    borderRadius: 16,
+    backgroundColor: "#FFFBF7",
+    color: C.text,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontFamily: "SpaceMono",
+    fontSize: 14,
+  },
+  inputNotes: { minHeight: 72, textAlignVertical: "top" },
+
+  chipsRow: { flexDirection: "row", gap: 8, paddingVertical: 2 },
+  chipsRowCompact: {
+    flexDirection: "row",
+    gap: 6,
+    paddingVertical: 2,
+    paddingRight: 8,
+  },
+  frequencyChipsWrapper: {
+    overflow: "visible",
+    height: 48,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1.2,
+    borderColor: "#E8DFD6",
+    borderRadius: 999,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    backgroundColor: C.offWhite,
+  },
+  smallChip: {
+    borderWidth: 1.2,
+    borderColor: "#E8DFD6",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: C.offWhite,
+    minHeight: 36,
+    justifyContent: "center",
+  },
+  smallChipActive: {
+    backgroundColor: C.accentGreen,
+    borderColor: C.accentGreen,
+  },
+
+  twoCol: { flexDirection: "row", gap: 10 },
+
+  actionsRow: { flexDirection: "row", gap: 10, marginTop: 2 },
+  ghostBtn: {
+    flex: 1,
+    borderWidth: 1.2,
+    borderColor: "#E8DFD6",
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 15,
+  },
+  primaryBtn: {
+    flex: 1,
+    backgroundColor: C.accentGreen,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 15,
+  },
+
+  emptyWrap: { alignItems: "center", gap: 10, paddingVertical: 24 },
+  emptyText: {
+    fontFamily: "SpaceMono",
+    fontSize: 14,
+    color: C.muted,
+  },
+
+  taskRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#FAFAF8",
+    paddingVertical: 13,
+  },
+  taskRowPressable: {
+    flexDirection: "row",
+  },
+  leftStripe: { width: 4, alignSelf: "stretch", borderRadius: 99 },
+  iconBubble: {
     width: 40,
-    height: 1,
-    backgroundColor: D.rule,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  taskTitle: { fontFamily: "SpaceMono", fontSize: 15, color: C.text },
+  taskMeta: {
+    fontFamily: "SpaceMono",
+    fontSize: 11,
+    color: C.muted,
+    marginTop: 2,
+  },
+  taskNotes: {
+    fontFamily: "SpaceMono",
+    fontSize: 12,
+    color: C.text,
+    marginTop: 4,
+  },
+
+  taskRightActions: { flexDirection: "row", alignItems: "center" },
+  iconBtn: { paddingHorizontal: 6, paddingVertical: 4 },
+
+  timePickerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1.2,
+    borderColor: "#E8DFD6",
+    borderRadius: 14,
+    backgroundColor: C.offWhite,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  timePickerText: {
+    fontFamily: "SpaceMono",
+    fontSize: 14,
+    color: C.text,
+    textAlign: "center",
+    flex: 1,
+  },
+
+  timePickerDisplayText: {
+    fontFamily: "SpaceMono",
+    fontSize: 32,
+    color: C.accentGreen,
+  },
+
+  timePickerModalOverlay: {
+    flex: 1,
+    backgroundColor: "transparent",
+    justifyContent: "flex-end",
+  },
+  timePickerModalContainer: {
+    backgroundColor: C.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 0,
+    maxHeight: "80%",
+  },
+  timePickerModalContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 0,
+    alignItems: "center",
+  },
+  timePickerModalTitle: {
+    fontFamily: "SpaceMono",
+    fontSize: 16,
+    color: C.text,
+    marginBottom: 16,
+  },
+  timePickerNative: {
+    width: "100%",
+    height: 220,
+  },
+  timePickerFooter: {
+    position: "relative",
+    flexDirection: "row",
+    gap: 12,
+    backgroundColor: C.card,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E8DFD6",
+  },
+  timePickerCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.2,
+    borderColor: "#E8DFD6",
+    alignItems: "center",
+    backgroundColor: C.offWhite,
+  },
+  timePickerCancelText: {
+    fontFamily: "SpaceMono",
+    fontSize: 14,
+    color: C.text,
+  },
+  timePickerConfirm: {
+    flex: 1,
+    backgroundColor: C.accentGreen,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  timePickerConfirmText: {
+    fontFamily: "SpaceMono",
+    fontSize: 14,
+    color: "#FFFFFF",
   },
 });

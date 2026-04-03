@@ -34,6 +34,7 @@ export default function RootLayout() {
                 <Stack.Screen name="plants/new" />
                 <Stack.Screen name="plants/[id]" />
                 <Stack.Screen name="plants/[id]/edit" />
+                <Stack.Screen name="tasks/[id]" />
                 <Stack.Screen
                   name="modal"
                   options={{ presentation: "modal", title: "Modal" }}

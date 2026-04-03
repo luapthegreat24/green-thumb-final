@@ -42,6 +42,8 @@ export type TaskFormValues = {
 interface TaskFormProps {
   task?: CareTask;
   initialTaskType?: TaskType;
+  initialDate?: Date;
+  initialHour?: number;
   onSubmit: (values: TaskFormValues) => Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
@@ -69,6 +71,8 @@ function combineDateAndTime(
 export function TaskForm({
   task,
   initialTaskType = "watering",
+  initialDate,
+  initialHour,
   onSubmit,
   onCancel,
   submitLabel,
@@ -76,6 +80,21 @@ export function TaskForm({
   const { plants } = useGarden();
 
   const defaultPlant = useMemo(() => plants[0], [plants]);
+
+  const initializeDateTime = () => {
+    if (task?.dateTime) {
+      return task.dateTime;
+    }
+
+    if (initialDate && typeof initialHour === "number") {
+      const date = new Date(initialDate);
+      date.setHours(initialHour, 0, 0, 0);
+      return date;
+    }
+
+    return new Date(Date.now() + 60 * 60 * 1000);
+  };
+
   const [plantId, setPlantId] = useState(
     task?.plantId ?? defaultPlant?.id ?? "",
   );
@@ -86,9 +105,7 @@ export function TaskForm({
     task?.taskType ?? initialTaskType,
   );
   const [title, setTitle] = useState(task?.title ?? "");
-  const [dateTime, setDateTime] = useState(
-    task?.dateTime ?? new Date(Date.now() + 60 * 60 * 1000),
-  );
+  const [dateTime, setDateTime] = useState(initializeDateTime());
   const [isRecurring, setIsRecurring] = useState(task?.isRecurring ?? false);
   const [frequency, setFrequency] = useState<TaskFrequency | null>(
     task?.frequency ?? null,
