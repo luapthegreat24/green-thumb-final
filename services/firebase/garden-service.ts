@@ -17,7 +17,10 @@ import type {
   UpsertPlantInput,
 } from "@/features/garden/domain/plant";
 import { firebaseDb } from "@/lib/firebase";
-import { uploadImageUri } from "@/services/firebase/media-upload";
+import {
+  convertImageToBase64,
+  isLocalMediaUri,
+} from "@/services/firebase/media-upload";
 
 export type FirestorePlant = {
   id: string;
@@ -269,5 +272,8 @@ export async function uploadPlantImage(
   plantId: string,
   imageUri: string,
 ): Promise<string> {
-  return uploadImageUri(`plants/${userId}/${plantId}/image`, imageUri);
+  if (isLocalMediaUri(imageUri)) {
+    return convertImageToBase64(imageUri);
+  }
+  return imageUri;
 }

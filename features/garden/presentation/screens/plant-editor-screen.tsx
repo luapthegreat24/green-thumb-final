@@ -1,11 +1,13 @@
+import { useFadeUp } from "@/hooks/use-screen-animations";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
-import { Alert, Text, View } from "react-native";
+import { Alert, Animated, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { Pressable } from "react-native";
 
-import { P, SP, TY } from "@/constants/herbarium-theme";
+import { AppHeader } from "@/components/ui/app-header";
+import { AppText } from "@/components/ui/app-text";
+import { DS } from "@/constants/app-design-system";
 import type { Plant } from "@/features/garden/domain/plant";
 import { PlantForm } from "@/features/garden/presentation/components/plant-form";
 import { useGarden } from "../../../../providers/garden-provider";
@@ -65,48 +67,56 @@ export function PlantEditorScreen({ mode, plant }: PlantEditorScreenProps) {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: P.p1 }}>
-      <View
-        style={{
-          paddingHorizontal: SP.lg,
-          paddingTop: insets.top + SP.md,
-          gap: SP.sm,
-        }}
-      >
-        <Pressable
-          onPress={onBack}
+    <View style={{ flex: 1, backgroundColor: DS.colors.bg }}>
+      <Animated.View style={useFadeUp(0)}>
+        <View
           style={{
-            alignSelf: "flex-start",
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 6,
-            backgroundColor: P.p0,
-            borderWidth: 1,
-            borderColor: P.hair,
-            borderRadius: 999,
-            paddingHorizontal: 12,
-            paddingVertical: 7,
+            paddingHorizontal: DS.spacing.screenX,
+            paddingTop: insets.top + DS.spacing.md,
+            paddingBottom: DS.spacing.lg,
+            gap: DS.spacing.md,
+            backgroundColor: DS.colors.bg,
           }}
         >
-          <Ionicons name="arrow-back" size={16} color={P.i1} />
-          <Text style={{ ...TY.body, color: P.i1, fontWeight: "700" }}>
-            Back
-          </Text>
-        </Pressable>
-        <Text style={{ ...TY.monoLabel, fontSize: 10, color: P.g1 }}>
-          {mode === "create" ? "Add Plant" : "Edit Plant"}
-        </Text>
-        <Text style={{ ...TY.display, fontSize: 32, color: P.i1 }}>
-          {mode === "create" ? "New plant" : "Update details"}
-        </Text>
-      </View>
-      <PlantForm
-        initialPlant={plant}
-        submitLabel={mode === "create" ? "Add Plant" : "Save Changes"}
-        busy={busy}
-        onSubmit={submit}
-        onDelete={mode === "edit" ? onDelete : undefined}
-      />
+          <Pressable
+            onPress={onBack}
+            style={({ pressed }) => [
+              {
+                alignSelf: "flex-start",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: DS.spacing.sm,
+                backgroundColor: DS.colors.surface,
+                borderWidth: 1,
+                borderColor: DS.colors.borderSoft,
+                borderRadius: DS.radius.pill,
+                paddingHorizontal: DS.spacing.md,
+                paddingVertical: DS.spacing.sm,
+              },
+              pressed && { opacity: 0.8 },
+            ]}
+          >
+            <Ionicons name="chevron-back" size={18} color={DS.colors.primary} />
+            <AppText style={{ color: DS.colors.primary, fontWeight: "700" }}>
+              Back
+            </AppText>
+          </Pressable>
+          <AppHeader
+            eyebrow={mode === "create" ? "Add Plant" : "Edit Plant"}
+            title={mode === "create" ? "Introduce your plant" : "Update plant"}
+          />
+        </View>
+      </Animated.View>
+
+      <Animated.View style={[useFadeUp(80), { flex: 1 }]}>
+        <PlantForm
+          initialPlant={plant}
+          submitLabel={mode === "create" ? "Add Plant" : "Save Changes"}
+          busy={busy}
+          onSubmit={submit}
+          onDelete={mode === "edit" ? onDelete : undefined}
+        />
+      </Animated.View>
     </View>
   );
 }

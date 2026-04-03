@@ -10,29 +10,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { P } from "@/constants/herbarium-theme";
 import { useAuth } from "../../providers/auth-provider";
-
-// ─── Same design tokens as index.tsx ─────────────────────────────────────────
-const P = {
-  p0: "#FEFBF4",
-  p1: "#F5EFE0",
-  p2: "#EBE0C8",
-  p3: "#DDD0B0",
-  i0: "#171008",
-  i1: "#2E2212",
-  i2: "#5C4A28",
-  i3: "#9C8560",
-  i4: "#C4AE88",
-  g0: "#1E3D24",
-  g1: "#2B5C36",
-  g2: "#3A7048",
-  g3: "#5B9168",
-  gBg: "rgba(58,112,72,0.12)",
-  rust: "#B83C22",
-  sketch: "rgba(30,20,8,0.22)",
-  heavy: "rgba(30,20,8,0.45)",
-  hair: "rgba(30,20,8,0.10)",
-} as const;
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 // Add / remove tabs here — the bar renders from this array automatically.
@@ -51,16 +30,10 @@ const TABS = [
     iconOn: "leaf",
   },
   {
-    name: "explore",
-    label: "Explore",
-    icon: "compass-outline",
-    iconOn: "compass",
-  },
-  {
-    name: "add",
-    label: "Record",
-    icon: "add",
-    iconOn: "add",
+    name: "garden",
+    label: "My Garden",
+    icon: "grid-outline",
+    iconOn: "grid",
   },
   {
     name: "journal",

@@ -4,6 +4,8 @@ import * as ImagePicker from "expo-image-picker";
 import React, { useMemo, useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,7 +15,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { P, SP, TY } from "@/constants/herbarium-theme";
+import { DS } from "@/constants/app-design-system";
 import type { Plant, UpsertPlantInput } from "@/features/garden/domain/plant";
 
 type PlantFormProps = {
@@ -23,9 +25,6 @@ type PlantFormProps = {
   onSubmit: (input: UpsertPlantInput) => Promise<void>;
   onDelete?: () => void;
 };
-
-const FALLBACK_IMAGE =
-  "https://images.unsplash.com/photo-1463320726281-696a485928c7?auto=format&fit=crop&w=600&q=60";
 
 export function PlantForm({
   initialPlant,
@@ -37,9 +36,6 @@ export function PlantForm({
   const insets = useSafeAreaInsets();
   const [name, setName] = useState(initialPlant?.name ?? "");
   const [species, setSpecies] = useState(initialPlant?.species ?? "");
-  const [datePlanted, setDatePlanted] = useState(
-    initialPlant?.datePlanted ?? new Date().toISOString().slice(0, 10),
-  );
   const [wateringFrequencyDays, setWateringFrequencyDays] = useState(
     String(initialPlant?.wateringFrequencyDays ?? 7),
   );
@@ -51,11 +47,10 @@ export function PlantForm({
 
   const valid = useMemo(() => {
     if (!name.trim() || !species.trim()) return false;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(datePlanted.trim())) return false;
     const frequency = Number(wateringFrequencyDays);
     if (!Number.isFinite(frequency) || frequency <= 0) return false;
     return true;
-  }, [name, species, datePlanted, wateringFrequencyDays]);
+  }, [name, species, wateringFrequencyDays]);
 
   const chooseFromGallery = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -118,16 +113,15 @@ export function PlantForm({
       return;
     }
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(datePlanted.trim())) {
-      setError("Date planted must use format YYYY-MM-DD.");
-      return;
-    }
-
     const frequency = Number(wateringFrequencyDays);
     if (!Number.isFinite(frequency) || frequency <= 0) {
       setError("Watering frequency must be a positive number of days.");
       return;
     }
+
+    // Date planted is now automatic: current date on create, preserved on edit.
+    const datePlanted =
+      initialPlant?.datePlanted ?? new Date().toISOString().slice(0, 10);
 
     await onSubmit({
       name,
@@ -140,190 +134,306 @@ export function PlantForm({
   };
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: P.p1 }}
-      contentContainerStyle={[
-        styles.container,
-        { paddingBottom: insets.bottom + SP.xxxl + 64 },
-      ]}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
-      <View style={styles.card}>
-        <Text style={styles.label}>Plant Image</Text>
-        <Image
-          source={{ uri: imageUri ?? FALLBACK_IMAGE }}
-          style={styles.image}
-          contentFit="cover"
-        />
-        <View style={styles.row}>
-          <Pressable onPress={chooseFromGallery} style={styles.secondaryButton}>
-            <Ionicons name="images-outline" size={16} color={P.g0} />
-            <Text style={styles.secondaryButtonText}>Gallery</Text>
-          </Pressable>
-          <Pressable onPress={takePhoto} style={styles.secondaryButton}>
-            <Ionicons name="camera-outline" size={16} color={P.g0} />
-            <Text style={styles.secondaryButtonText}>Camera</Text>
-          </Pressable>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: DS.colors.bg }}
+        contentContainerStyle={[
+          styles.container,
+          { flexGrow: 1 },
+          { paddingBottom: insets.bottom + DS.spacing.xxxl + 64 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        scrollEnabled={true}
+      >
+        {/* Image Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Plant Photo</Text>
+          {imageUri ? (
+            <View>
+              <Image
+                source={{ uri: imageUri }}
+                style={styles.image}
+                contentFit="cover"
+              />
+            </View>
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Ionicons
+                name="image-outline"
+                size={48}
+                color={DS.colors.textFaint}
+              />
+              <Text style={styles.imagePlaceholderText}>Add a photo</Text>
+            </View>
+          )}
+          <View style={styles.imageButtonsRow}>
+            <Pressable
+              onPress={chooseFromGallery}
+              style={({ pressed }) => [
+                styles.imageButton,
+                pressed && styles.imageButtonPressed,
+              ]}
+            >
+              <Ionicons name="image" size={18} color={DS.colors.primary} />
+              <Text style={styles.imageButtonText}>Gallery</Text>
+            </Pressable>
+            <Pressable
+              onPress={takePhoto}
+              style={({ pressed }) => [
+                styles.imageButton,
+                pressed && styles.imageButtonPressed,
+              ]}
+            >
+              <Ionicons name="camera" size={18} color={DS.colors.primary} />
+              <Text style={styles.imageButtonText}>Camera</Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>Plant Name *</Text>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="Monstera"
-          placeholderTextColor={P.i3}
-          style={styles.input}
-        />
+        {/* Plant Details Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Plant Details</Text>
 
-        <Text style={styles.label}>Plant Type / Species *</Text>
-        <TextInput
-          value={species}
-          onChangeText={setSpecies}
-          placeholder="Monstera deliciosa"
-          placeholderTextColor={P.i3}
-          style={styles.input}
-        />
+          <View>
+            <Text style={styles.fieldLabel}>Plant Name *</Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Monstera"
+              placeholderTextColor={DS.colors.textFaint}
+              style={styles.input}
+            />
+          </View>
 
-        <Text style={styles.label}>Date Planted (YYYY-MM-DD) *</Text>
-        <TextInput
-          value={datePlanted}
-          onChangeText={setDatePlanted}
-          placeholder="2026-04-02"
-          placeholderTextColor={P.i3}
-          autoCapitalize="none"
-          style={styles.input}
-        />
+          <View>
+            <Text style={styles.fieldLabel}>Species / Type *</Text>
+            <TextInput
+              value={species}
+              onChangeText={setSpecies}
+              placeholder="Monstera deliciosa"
+              placeholderTextColor={DS.colors.textFaint}
+              style={styles.input}
+            />
+          </View>
+        </View>
 
-        <Text style={styles.label}>Watering Frequency (days) *</Text>
-        <TextInput
-          value={wateringFrequencyDays}
-          onChangeText={setWateringFrequencyDays}
-          keyboardType="number-pad"
-          placeholder="7"
-          placeholderTextColor={P.i3}
-          style={styles.input}
-        />
+        {/* Care Information Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Care Information</Text>
 
-        <Text style={styles.label}>Notes (optional)</Text>
-        <TextInput
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="Sunlight, soil, reminders..."
-          placeholderTextColor={P.i3}
-          multiline
-          style={[styles.input, { minHeight: 90, textAlignVertical: "top" }]}
-        />
+          <View>
+            <Text style={styles.fieldLabel}>Watering Frequency (days) *</Text>
+            <TextInput
+              value={wateringFrequencyDays}
+              onChangeText={setWateringFrequencyDays}
+              keyboardType="number-pad"
+              placeholder="7"
+              placeholderTextColor={DS.colors.textFaint}
+              style={styles.input}
+            />
+          </View>
 
+          <View>
+            <Text style={styles.fieldLabel}>Notes & Reminders</Text>
+            <TextInput
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Sunlight, soil, reminders..."
+              placeholderTextColor={DS.colors.textFaint}
+              multiline
+              style={[
+                styles.input,
+                { minHeight: 100, textAlignVertical: "top" },
+              ]}
+            />
+          </View>
+        </View>
+
+        {/* Error Message */}
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Pressable
-          disabled={!valid || busy}
-          onPress={submit}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            (!valid || busy) && styles.disabledButton,
-            pressed && valid && !busy && styles.pressedButton,
-          ]}
-        >
-          <Text style={styles.primaryButtonText}>
-            {busy ? "Saving..." : submitLabel}
-          </Text>
-        </Pressable>
-
-        {onDelete ? (
-          <Pressable onPress={onDelete} style={styles.deleteButton}>
-            <Text style={styles.deleteButtonText}>Delete Plant</Text>
+        {/* Action Buttons */}
+        <View style={styles.actionSection}>
+          <Pressable
+            disabled={!valid || busy}
+            onPress={submit}
+            style={({ pressed }) => [
+              styles.submitButton,
+              (!valid || busy) && styles.submitButtonDisabled,
+              pressed && valid && !busy && styles.submitButtonPressed,
+            ]}
+          >
+            <View style={styles.submitIconBadge}>
+              <Ionicons
+                name="leaf-outline"
+                size={16}
+                color={DS.colors.surface}
+              />
+            </View>
+            <Text style={styles.submitButtonText}>
+              {busy ? "Saving..." : submitLabel}
+            </Text>
           </Pressable>
-        ) : null}
-      </View>
-    </ScrollView>
+
+          {onDelete ? (
+            <Pressable onPress={onDelete} style={styles.deleteButton}>
+              <Text style={styles.deleteButtonText}>Delete Plant</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: SP.lg,
-    gap: SP.md,
+    paddingHorizontal: DS.spacing.screenX,
+    paddingTop: DS.spacing.lg,
+    gap: DS.spacing.xl,
   },
-  card: {
-    backgroundColor: P.p0,
-    borderRadius: 18,
+  section: {
+    backgroundColor: DS.colors.surface,
+    borderRadius: DS.radius.lg,
     borderWidth: 1,
-    borderColor: P.sketch,
-    padding: SP.md,
-    gap: SP.sm,
+    borderColor: DS.colors.borderSoft,
+    padding: DS.spacing.lg,
+    gap: DS.spacing.lg,
+    ...DS.shadow.cardSoft,
   },
-  label: {
-    ...TY.monoLabel,
-    fontSize: 9,
-    color: P.i3,
+  sectionLabel: {
+    ...DS.typography.mono,
+    fontSize: 11,
+    color: DS.colors.textFaint,
+    marginBottom: DS.spacing.xs,
+  },
+  fieldLabel: {
+    ...DS.typography.bodyStrong,
+    fontSize: 14,
+    color: DS.colors.text,
+    marginBottom: DS.spacing.sm,
   },
   input: {
     borderWidth: 1,
-    borderColor: P.sketch,
-    borderRadius: 12,
-    backgroundColor: P.p1,
-    paddingHorizontal: SP.md,
-    paddingVertical: 12,
-    color: P.i1,
+    borderColor: DS.colors.borderSoft,
+    borderRadius: DS.radius.md,
+    backgroundColor: DS.colors.bg,
+    paddingHorizontal: DS.spacing.md,
+    paddingVertical: DS.spacing.md,
+    color: DS.colors.text,
     fontSize: 15,
+    fontFamily: "System",
+    minHeight: 50,
   },
   image: {
     width: "100%",
-    height: 180,
-    borderRadius: 12,
-    backgroundColor: P.p2,
+    height: 200,
+    borderRadius: DS.radius.md,
+    backgroundColor: DS.colors.surfaceAlt,
+    marginBottom: DS.spacing.sm,
   },
-  row: {
+  imagePlaceholder: {
+    width: "100%",
+    height: 200,
+    borderRadius: DS.radius.md,
+    borderWidth: 2,
+    borderColor: DS.colors.borderSoft,
+    borderStyle: "dashed",
+    backgroundColor: DS.colors.bg,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: DS.spacing.md,
+    marginBottom: DS.spacing.sm,
+  },
+  imagePlaceholderText: {
+    ...DS.typography.body,
+    color: DS.colors.textFaint,
+    fontSize: 14,
+  },
+  imageButtonsRow: {
     flexDirection: "row",
-    gap: SP.sm,
+    gap: DS.spacing.md,
   },
-  secondaryButton: {
+  imageButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    backgroundColor: P.p2,
-    borderRadius: 12,
-    paddingVertical: 12,
+    gap: DS.spacing.sm,
+    backgroundColor: DS.colors.primarySoft,
+    borderWidth: 1,
+    borderColor: DS.colors.borderSoft,
+    borderRadius: DS.radius.md,
+    paddingVertical: DS.spacing.md,
   },
-  secondaryButtonText: {
-    ...TY.body,
-    color: P.g0,
+  imageButtonPressed: {
+    opacity: 0.8,
+  },
+  imageButtonText: {
+    ...DS.typography.bodyStrong,
+    color: DS.colors.primary,
+    fontSize: 14,
+  },
+  actionSection: {
+    gap: DS.spacing.md,
+    marginTop: DS.spacing.md,
+  },
+  submitButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: DS.spacing.sm,
+    minHeight: 54,
+    borderWidth: 1,
+    borderColor: DS.colors.primary,
+    borderRadius: DS.radius.md,
+    backgroundColor: DS.colors.primary,
+    paddingHorizontal: DS.spacing.lg,
+    paddingVertical: DS.spacing.md,
+    ...DS.shadow.cardSoft,
+  },
+  submitIconBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: DS.radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+  submitButtonText: {
+    ...DS.typography.bodyStrong,
+    color: DS.colors.surface,
+    fontSize: 15,
+    letterSpacing: 0.2,
     fontWeight: "700",
   },
-  primaryButton: {
-    marginTop: SP.sm,
-    backgroundColor: P.g0,
-    borderRadius: 12,
-    alignItems: "center",
-    paddingVertical: 13,
-  },
-  primaryButtonText: {
-    color: P.p0,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  disabledButton: {
+  submitButtonDisabled: {
     opacity: 0.55,
+    borderColor: DS.colors.borderSoft,
+    backgroundColor: DS.colors.textFaint,
   },
-  pressedButton: {
+  submitButtonPressed: {
     opacity: 0.9,
   },
   deleteButton: {
-    marginTop: SP.sm,
     alignItems: "center",
-    paddingVertical: 10,
+    justifyContent: "center",
+    paddingVertical: DS.spacing.md,
   },
   deleteButtonText: {
-    ...TY.body,
-    color: P.rust,
-    fontWeight: "800",
+    ...DS.typography.bodyStrong,
+    color: DS.colors.danger,
+    fontSize: 15,
+    fontWeight: "700",
   },
   error: {
-    ...TY.body,
-    color: P.rust,
+    ...DS.typography.body,
+    color: DS.colors.danger,
+    paddingHorizontal: DS.spacing.lg,
+    paddingVertical: DS.spacing.md,
   },
 });

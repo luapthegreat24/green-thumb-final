@@ -18,7 +18,10 @@ import React, {
 } from "react";
 
 import { firebaseAuth } from "@/lib/firebase";
-import { isLocalMediaUri, uploadImageUri } from "@/services/firebase/media-upload";
+import {
+  convertImageToBase64,
+  isLocalMediaUri,
+} from "@/services/firebase/media-upload";
 import {
   createUserProfileDoc,
   subscribeUserProfile,
@@ -27,7 +30,7 @@ import {
 } from "@/services/firebase/user-service";
 
 type UpdateProfileInput = {
-  displayName: string;
+  displayName?: string;
   photoUri?: string | null;
   currentPassword?: string;
   newPassword?: string;
@@ -84,8 +87,8 @@ function mapAuthError(error: unknown) {
   }
 }
 
-async function uploadAvatarPhoto(uid: string, photoUri: string) {
-  return uploadImageUri(`profiles/${uid}/avatar`, photoUri);
+async function convertAvatarToBase64(photoUri: string): Promise<string> {
+  return convertImageToBase64(photoUri);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -225,31 +228,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
 
     try {
-      let photoURL = currentUser.photoURL;
+      let photoDataUri: string | undefined;
       if (photoUri && isLocalMediaUri(photoUri)) {
-        photoURL = await uploadAvatarPhoto(currentUser.uid, photoUri);
-      } else if (photoUri) {
-        photoURL = photoUri;
+        photoDataUri = await convertAvatarToBase64(photoUri);
       }
 
-      const authSafePhotoURL =
-        photoURL &&
-        (photoURL.startsWith("http://") || photoURL.startsWith("https://"))
-          ? photoURL
-          : undefined;
+      const normalizedName = displayName
+        ? displayName.trim()
+        : (currentUser.displayName ?? "");
 
-      const normalizedName = displayName.trim();
-
-      if (
-        normalizedName !== (currentUser.displayName ?? "") ||
-        authSafePhotoURL !== currentUser.photoURL
-      ) {
+      if (normalizedName !== (currentUser.displayName ?? "")) {
         const updateInput: Parameters<typeof updateProfile>[1] = {
           displayName: normalizedName,
         };
-        if (authSafePhotoURL) {
-          updateInput.photoURL = authSafePhotoURL;
-        }
         await updateProfile(currentUser, updateInput);
       }
 
@@ -283,13 +274,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         displayName: normalizedName,
         email: currentUser.email ?? profile?.email ?? "",
       };
-      if (photoURL) {
-        updateInput.photoURL = photoURL;
+      if (photoDataUri) {
+        updateInput.photoDataUri = photoDataUri;
       }
       await updateUserProfileDoc(currentUser.uid, updateInput);
 
       await currentUser.reload();
       setUser(firebaseAuth.currentUser);
+
+      // Force re-fetch of profile data to ensure UI updates immediately
+      // The Firestore listener will update, but we add a small delay to ensure server state is consistent
+      await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (caught) {
       setError(mapAuthError(caught));
       throw caught;

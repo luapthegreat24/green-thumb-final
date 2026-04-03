@@ -14,6 +14,7 @@ export type UserProfile = {
   email: string;
   displayName: string;
   photoURL?: string;
+  photoDataUri?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -22,6 +23,7 @@ type UserProfileDoc = {
   email: string;
   displayName: string;
   photoURL?: string;
+  photoDataUri?: string;
   createdAt?: unknown;
   updatedAt?: unknown;
 };
@@ -41,6 +43,7 @@ function mapProfile(uid: string, data: UserProfileDoc): UserProfile {
     email: data.email,
     displayName: data.displayName,
     photoURL: data.photoURL,
+    photoDataUri: data.photoDataUri,
     createdAt: toIso(data.createdAt),
     updatedAt: toIso(data.updatedAt),
   };
@@ -51,6 +54,7 @@ export async function createUserProfileDoc(input: {
   email: string;
   displayName: string;
   photoURL?: string;
+  photoDataUri?: string;
 }) {
   const data: Record<string, unknown> = {
     email: input.email,
@@ -62,13 +66,18 @@ export async function createUserProfileDoc(input: {
   if (input.photoURL !== undefined) {
     data.photoURL = input.photoURL;
   }
+  if (input.photoDataUri !== undefined) {
+    data.photoDataUri = input.photoDataUri;
+  }
 
   await setDoc(doc(firebaseDb, "users", input.uid), data);
 }
 
 export async function updateUserProfileDoc(
   uid: string,
-  updates: Partial<Pick<UserProfile, "displayName" | "email" | "photoURL">>,
+  updates: Partial<
+    Pick<UserProfile, "displayName" | "email" | "photoURL" | "photoDataUri">
+  >,
 ) {
   const data: Record<string, unknown> = {
     updatedAt: serverTimestamp(),
@@ -82,6 +91,9 @@ export async function updateUserProfileDoc(
   }
   if (updates.photoURL !== undefined) {
     data.photoURL = updates.photoURL;
+  }
+  if (updates.photoDataUri !== undefined) {
+    data.photoDataUri = updates.photoDataUri;
   }
 
   await updateDoc(doc(firebaseDb, "users", uid), data);

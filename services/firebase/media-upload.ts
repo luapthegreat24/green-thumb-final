@@ -1,19 +1,3 @@
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-
-import { firebaseStorage } from "@/lib/firebase";
-
-const DATA_URI_REGEX = /^data:(.+);base64,(.+)$/;
-
-function isWebRuntime() {
-  return typeof window !== "undefined" && typeof document !== "undefined";
-}
-
-function detectImageExtensionFromMime(mimeType: string) {
-  if (mimeType.includes("png")) return "png";
-  if (mimeType.includes("webp")) return "webp";
-  return "jpg";
-}
-
 export function isLocalMediaUri(uri: string) {
   return (
     uri.startsWith("file://") ||
@@ -25,29 +9,36 @@ export function isLocalMediaUri(uri: string) {
   );
 }
 
-export async function uploadImageUri(
-  storagePathWithoutExtension: string,
-  imageUri: string,
-): Promise<string> {
-  const dataUriMatch = imageUri.match(DATA_URI_REGEX);
-  if (dataUriMatch) {
-    // Keep data URIs inline for now. On web this avoids Storage CORS during local dev,
-    // and on native it avoids RN BlobManager issues in Firebase SDK uploadString.
-    if (isWebRuntime()) {
-      return imageUri;
+/**
+ * Convert image URI to base64 data URL for storage in Firestore.
+ * Accessible anywhere without cloud infrastructure setup.
+ */
+export async function convertImageToBase64(imageUri: string): Promise<string> {
+  try {
+    const response = await fetch(imageUri);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: HTTP ${response.status}`);
     }
-    return imageUri;
+
+    const blob = await response.blob();
+    if (!blob || blob.size === 0) {
+      throw new Error("Image blob is empty or invalid");
+    }
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result);
+      };
+      reader.onerror = () => {
+        reject(new Error("Failed to read image as base64"));
+      };
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    throw new Error(
+      `Failed to convert image to base64: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
   }
-
-  const response = await fetch(imageUri);
-  const blob = await response.blob();
-  const mimeType = blob.type || "image/jpeg";
-  const extension = detectImageExtensionFromMime(mimeType);
-  const storageRef = ref(
-    firebaseStorage,
-    `${storagePathWithoutExtension}.${extension}`,
-  );
-
-  await uploadBytes(storageRef, blob, { contentType: mimeType });
-  return await getDownloadURL(storageRef);
 }

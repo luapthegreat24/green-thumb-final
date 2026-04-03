@@ -18,7 +18,6 @@ import type {
   UpsertPlantInput,
 } from "@/features/garden/domain/plant";
 import { useAuth } from "@/providers/auth-provider";
-import { isLocalMediaUri } from "@/services/firebase/media-upload";
 import {
   addCareLogDoc,
   addPlantDoc,
@@ -36,6 +35,7 @@ import {
   type FirestorePlant,
   type FirestoreSchedule,
 } from "@/services/firebase/garden-service";
+import { isLocalMediaUri } from "@/services/firebase/media-upload";
 
 type GardenContextValue = {
   plants: Plant[];
@@ -120,6 +120,9 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
   const [filters, setFiltersState] = useState<PlantFilters>({
     query: "",
     watering: "all",
+    status: "all",
+    species: "",
+    viewMode: "list",
   });
 
   useEffect(() => {
@@ -213,7 +216,11 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
     let finalImageUri = input.imageUri;
     if (input.imageUri && isLocalMediaUri(input.imageUri)) {
       const plantId = Math.random().toString(36).slice(2, 9);
-      finalImageUri = await uploadPlantImage(user.uid, plantId, input.imageUri!);
+      finalImageUri = await uploadPlantImage(
+        user.uid,
+        plantId,
+        input.imageUri!,
+      );
     }
 
     const plantInput: UpsertPlantInput = {
@@ -257,13 +264,17 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
     // Upload image if it's a local file
     let finalUpdates = updates;
     if (updates.imageUri && isLocalMediaUri(updates.imageUri)) {
-      const imageUrl = await uploadPlantImage(user.uid, plantId, updates.imageUri!);
+      const imageUrl = await uploadPlantImage(
+        user.uid,
+        plantId,
+        updates.imageUri!,
+      );
       finalUpdates = {
         ...updates,
         imageUri: imageUrl,
       };
     }
-    
+
     await updatePlantDoc(plantId, finalUpdates);
 
     const existing = plants.find((item) => item.id === plantId);

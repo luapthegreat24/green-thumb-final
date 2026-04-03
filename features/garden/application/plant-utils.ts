@@ -30,8 +30,16 @@ export function formatWateringLabel(plant: Plant) {
   return `Water in ${days}d`;
 }
 
+export function getPlantStatus(plant: Plant) {
+  const days = getDaysUntilWatering(plant);
+  if (days <= 0) return "Needs Water";
+  if (days <= 3) return "At Risk";
+  return "Healthy";
+}
+
 export function filterPlants(plants: Plant[], filters: PlantFilters) {
   const query = filters.query.trim().toLowerCase();
+  const speciesQuery = filters.species.trim().toLowerCase();
 
   return plants.filter((plant) => {
     const matchesQuery =
@@ -40,6 +48,17 @@ export function filterPlants(plants: Plant[], filters: PlantFilters) {
       plant.species.toLowerCase().includes(query);
 
     if (!matchesQuery) return false;
+
+    const matchesSpecies =
+      !speciesQuery || plant.species.toLowerCase().includes(speciesQuery);
+
+    if (!matchesSpecies) return false;
+
+    if (filters.status !== "all") {
+      const days = getDaysUntilWatering(plant);
+      const status = days <= 0 ? "needs-water" : days <= 3 ? "at-risk" : "healthy";
+      if (status !== filters.status) return false;
+    }
 
     if (filters.watering === "all") return true;
 

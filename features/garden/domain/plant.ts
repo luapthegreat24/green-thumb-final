@@ -34,4 +34,7 @@ export type UpsertPlantInput = {
 export type PlantFilters = {
   query: string;
   watering: "all" | "today" | "week";
+  status: "all" | "needs-water" | "at-risk" | "healthy";
+  species: string;
+  viewMode: "list" | "grid";
 };
