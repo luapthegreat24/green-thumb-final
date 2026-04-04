@@ -33,12 +33,14 @@ export default function SignupScreen() {
   }, [displayName, email, password]);
 
   if (user) {
-    return <Redirect href="/(tabs)" />;
+    return <Redirect href="/welcome" />;
   }
 
   const onSubmit = async () => {
     clearError();
     setLocalError(null);
+
+    // ... validation
 
     if (!displayName.trim() || !email.trim() || !password.trim()) {
       setLocalError("Name, email, and password are required.");
@@ -57,7 +59,7 @@ export default function SignupScreen() {
 
     try {
       await signup(displayName, email, password);
-      router.replace("/(tabs)");
+      router.replace("/welcome");
     } catch {
       // handled by context error state
     }
@@ -80,6 +82,7 @@ export default function SignupScreen() {
     >
       <AuthNotice message={formError} />
       <AuthField
+        icon="person-outline"
         label="Name"
         value={displayName}
         onChangeText={setDisplayName}
@@ -87,6 +90,7 @@ export default function SignupScreen() {
         autoComplete="name"
       />
       <AuthField
+        icon="mail-outline"
         label="Email"
         value={email}
         onChangeText={setEmail}
@@ -95,6 +99,7 @@ export default function SignupScreen() {
         autoComplete="email"
       />
       <AuthField
+        icon="lock-closed-outline"
         label="Password"
         value={password}
         onChangeText={setPassword}

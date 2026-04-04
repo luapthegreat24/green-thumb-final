@@ -56,7 +56,8 @@ export function filterPlants(plants: Plant[], filters: PlantFilters) {
 
     if (filters.status !== "all") {
       const days = getDaysUntilWatering(plant);
-      const status = days <= 0 ? "needs-water" : days <= 3 ? "at-risk" : "healthy";
+      const status =
+        days <= 0 ? "needs-water" : days <= 3 ? "at-risk" : "healthy";
       if (status !== filters.status) return false;
     }
 

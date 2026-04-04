@@ -7,7 +7,6 @@ import {
   Easing,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -325,7 +324,7 @@ export default function TabLayout() {
         screenOptions={{
           headerShown: false,
         }}
-        tabBar={(props) => <HerbariumTabBar {...props} />}
+        tabBar={() => null}
       >
         {TABS.map((tab) => (
           <Tabs.Screen
@@ -335,91 +334,6 @@ export default function TabLayout() {
           />
         ))}
       </Tabs>
-
-      {isFabMenuOpen && (
-        <Pressable
-          style={st.fabBackdrop}
-          onPress={closeFabMenu}
-          accessibilityRole="button"
-          accessibilityLabel="Close action menu"
-        />
-      )}
-
-      <View
-        style={[st.speedDialLayer, { bottom: speedDialBaseBottom }]}
-        pointerEvents={isFabMenuOpen ? "auto" : "none"}
-      >
-        {speedDialActions.map((action, index) => (
-          <Animated.View
-            key={action.key}
-            style={[st.speedDialRow, getSpeedDialItemStyle(index)]}
-          >
-            <Pressable
-              onPress={action.onPress}
-              style={({ pressed }) => [
-                st.speedDialAction,
-                pressed && st.speedDialActionPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={action.label}
-            >
-              <View style={st.speedDialLabelPill}>
-                <Text style={st.speedDialLabelText}>{action.label}</Text>
-              </View>
-              <View
-                style={[
-                  st.speedDialFab,
-                  {
-                    backgroundColor: action.color,
-                    borderColor: action.borderColor,
-                  },
-                ]}
-              >
-                <Ionicons name={action.icon} size={18} color="#FFFFFF" />
-              </View>
-            </Pressable>
-          </Animated.View>
-        ))}
-      </View>
-
-      <Animated.View
-        style={[
-          st.chatFabWrap,
-          { bottom: fabBaseBottom, transform: [{ scale: mainFabScale }] },
-        ]}
-      >
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            st.chatFabAura,
-            {
-              opacity: mainFabAuraOpacity,
-              transform: [{ scale: mainFabAuraScale }],
-            },
-          ]}
-        />
-        <Pressable
-          onPress={() => setIsFabMenuOpen((current) => !current)}
-          style={({ pressed }) => [
-            st.chatFab,
-            !isFabMenuOpen && st.chatFabIdle,
-            pressed && { opacity: 0.9 },
-            isFabMenuOpen && st.chatFabOpen,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={
-            isFabMenuOpen ? "Close quick actions" : "Open quick actions"
-          }
-        >
-          <Animated.View style={{ transform: [{ rotate: mainFabRotate }] }}>
-            <Ionicons
-              name="add"
-              size={23}
-              color={isFabMenuOpen ? "#FFFFFF" : "#F5FFF8"}
-            />
-          </Animated.View>
-        </Pressable>
-      </Animated.View>
     </View>
   );
 }
@@ -502,17 +416,6 @@ const st = StyleSheet.create({
     shadowRadius: 14,
     elevation: 12,
     overflow: "hidden",
-  },
-  chatFabIdle: {
-    backgroundColor: "rgba(46, 112, 66, 0.32)",
-    borderColor: "rgba(190, 234, 204, 0.78)",
-    borderWidth: 1.6,
-    shadowOpacity: 0.12,
-    shadowRadius: 11,
-    elevation: 8,
-  },
-  chatFabOpen: {
-    backgroundColor: "#245734",
   },
   fabBackdrop: {
     ...StyleSheet.absoluteFillObject,

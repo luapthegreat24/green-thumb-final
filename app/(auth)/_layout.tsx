@@ -23,8 +23,12 @@ export default function AuthLayout() {
   }
 
   if (user) {
-    return <Redirect href="/(tabs)" />;
+    return <Redirect href="/welcome" />;
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" options={{ gestureEnabled: false }} />
+    </Stack>
+  );
 }

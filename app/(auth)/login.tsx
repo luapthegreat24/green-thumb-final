@@ -1,6 +1,6 @@
 import { Redirect, router } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 
 import {
   AuthButton,
@@ -9,7 +9,8 @@ import {
   AuthNotice,
   AuthShell,
 } from "@/components/auth/auth-shell";
-import { P, SP, TY } from "@/constants/herbarium-theme";
+import { AppText } from "@/components/ui/app-text";
+import { DS } from "@/constants/app-design-system";
 import { useAuth } from "../../providers/auth-provider";
 
 function validateEmail(email: string) {
@@ -29,7 +30,7 @@ export default function LoginScreen() {
   }, [email, password]);
 
   if (user) {
-    return <Redirect href="/(tabs)" />;
+    return <Redirect href="/welcome" />;
   }
 
   const onSubmit = async () => {
@@ -53,7 +54,7 @@ export default function LoginScreen() {
 
     try {
       await login(email, password);
-      router.replace("/(tabs)");
+      router.replace("/welcome");
     } catch {
       // handled by context error state
     }
@@ -65,10 +66,13 @@ export default function LoginScreen() {
       title="Welcome back"
       subtitle="Sign in to your plant journal and continue where you left off."
       footer={
-        <View style={{ alignItems: "center", gap: SP.sm }}>
-          <Text style={{ ...TY.body, color: P.i3, textAlign: "center" }}>
+        <View style={{ alignItems: "center", gap: DS.spacing.sm }}>
+          <AppText
+            variant="caption"
+            style={{ color: DS.colors.textFaint, textAlign: "center" }}
+          >
             Secure session persistence is enabled through Firebase Auth.
-          </Text>
+          </AppText>
           <AuthLink
             text="Need an account?"
             action="Create one"
@@ -79,6 +83,7 @@ export default function LoginScreen() {
     >
       <AuthNotice message={formError} />
       <AuthField
+        icon="mail-outline"
         label="Email"
         value={email}
         onChangeText={setEmail}
@@ -87,6 +92,7 @@ export default function LoginScreen() {
         autoComplete="email"
       />
       <AuthField
+        icon="lock-closed-outline"
         label="Password"
         value={password}
         onChangeText={setPassword}

@@ -7,6 +7,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 
+import { GlobalAppChrome } from "@/components/ui/global-app-chrome";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { AppToastProvider } from "@/providers/app-toast-provider";
 import { AuthProvider } from "@/providers/auth-provider";
@@ -33,6 +34,7 @@ export default function RootLayout() {
                 <Stack screenOptions={{ headerShown: false }}>
                   <Stack.Screen name="(auth)" />
                   <Stack.Screen name="(tabs)" />
+                  <Stack.Screen name="welcome" />
                   <Stack.Screen name="plants/new" />
                   <Stack.Screen name="plants/[id]" />
                   <Stack.Screen name="plants/[id]/edit" />
@@ -49,6 +51,7 @@ export default function RootLayout() {
                     options={{ presentation: "modal", title: "Modal" }}
                   />
                 </Stack>
+                <GlobalAppChrome />
                 <StatusBar style="auto" />
               </ThemeProvider>
             </CareTasksProvider>
