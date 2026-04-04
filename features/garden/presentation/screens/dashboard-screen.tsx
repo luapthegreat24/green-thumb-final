@@ -8,6 +8,7 @@
  */
 
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useMemo } from "react";
 import {
   ActivityIndicator,
@@ -24,6 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SP, TY } from "@/constants/herbarium-theme";
 import { useFadeUp, usePressScale } from "@/hooks/use-screen-animations";
 import { useAuth } from "@/providers/auth-provider";
+import { useCareTasks } from "@/providers/care-tasks-provider";
 import { useGarden } from "@/providers/garden-provider";
 import { useWeather } from "@/providers/weather-provider";
 
@@ -161,6 +163,43 @@ const TASK_CFG: Record<
     verb: "Prune",
   },
 };
+
+const JOURNAL_TASK_STYLE = {
+  watering: {
+    icon: "water-outline",
+    color: D.forest,
+    label: "Watering",
+  },
+  fertilizing: {
+    icon: "flask-outline",
+    color: D.amber,
+    label: "Fertilizing",
+  },
+  pruning: {
+    icon: "cut-outline",
+    color: D.sage,
+    label: "Pruning",
+  },
+  repotting: {
+    icon: "cube-outline",
+    color: D.terracotta,
+    label: "Repotting",
+  },
+  note: {
+    icon: "create-outline",
+    color: D.inkFaint,
+    label: "Note",
+  },
+} as const;
+
+type Frequency = "once" | "daily" | "weekly";
+
+function prettyTime(time24: string) {
+  const [h, m] = time24.split(":").map(Number);
+  const suffix = h >= 12 ? "pm" : "am";
+  const hour12 = h % 12 || 12;
+  return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
+}
 
 function fmtDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
@@ -363,6 +402,7 @@ function WeatherCard({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export function DashboardScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile, user } = useAuth();
   const {
@@ -380,6 +420,7 @@ export function DashboardScreen() {
     refreshing: weatherRefreshing,
     refresh: refreshWeather,
   } = useWeather();
+  const { tasks: careTasks, markAsCompleted, markAsPending } = useCareTasks();
 
   const mastheadAnim = useFadeUp(0);
   const gardenSectionAnim = useFadeUp(180);
@@ -397,23 +438,32 @@ export function DashboardScreen() {
     };
   }, [plants, schedules, careLogs]);
 
-  const upcomingTasks = useMemo(() => {
-    const today = new Date().toISOString().split("T")[0];
-    return schedules
-      .filter((s) => s.status === "pending")
-      .sort((a, b) => +new Date(a.dueAt) - +new Date(b.dueAt))
+  const todaysCareTasks = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayKey = today.toISOString().slice(0, 10);
+
+    return careTasks
+      .filter((task) => task.dateTime.toISOString().slice(0, 10) === todayKey)
+      .sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime())
       .slice(0, 6)
-      .map((s) => {
-        const d = s.dueAt.split("T")[0];
-        return {
-          ...s,
-          plant: plants.find((p) => p.id === s.plantId),
-          isOverdue: d < today,
-          isToday: d === today,
-          displayDate: d,
-        };
-      });
-  }, [schedules, plants]);
+      .map((task) => ({
+        ...task,
+        frequency: task.isRecurring ? (task.frequency ?? "weekly") : "once",
+        dateKey: task.dateTime.toISOString().slice(0, 10),
+        time: `${String(task.dateTime.getHours()).padStart(2, "0")}:${String(
+          task.dateTime.getMinutes(),
+        ).padStart(2, "0")}`,
+      }));
+  }, [careTasks]);
+
+  const toggleTaskStatus = async (taskId: string, status: string) => {
+    if (status === "completed") {
+      await markAsPending(taskId);
+      return;
+    }
+    await markAsCompleted(taskId);
+  };
 
   if (loading) {
     return (
@@ -424,11 +474,10 @@ export function DashboardScreen() {
     );
   }
 
-  const name = (
-    profile?.displayName ||
-    user?.displayName ||
-    "there"
-  ).toLowerCase();
+  const name = profile?.displayName || user?.displayName || "there";
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const refreshing = gardenRefreshing || weatherRefreshing;
   const onRefresh = () => Promise.all([refreshGarden(), refreshWeather()]);
   const dateLabel = new Date()
@@ -453,7 +502,7 @@ export function DashboardScreen() {
         S.scroll,
         {
           paddingTop: insets.top + SP.sm,
-          paddingBottom: insets.bottom + SP.xxxl + 84,
+          paddingBottom: insets.bottom + SP.xl + 64,
         },
       ]}
     >
@@ -480,7 +529,7 @@ export function DashboardScreen() {
 
         {/* Hero greeting */}
         <View style={S.mastheadBody}>
-          <Text style={S.mastheadHello}>hello,</Text>
+          <Text style={S.mastheadHello}>{`${greeting},`}</Text>
           <Text style={S.mastheadName}>{name}</Text>
         </View>
 
@@ -548,38 +597,143 @@ export function DashboardScreen() {
       )}
 
       {/* ───────────────────────────────────────────
-          4. CARE SCHEDULE
+          4. CARE TASKS (TODAY)
       ─────────────────────────────────────────── */}
-      {upcomingTasks.length > 0 ? (
-        <Animated.View style={[S.card, tasksSectionAnim]}>
-          <SectionHead
-            title="care schedule"
-            sub="upcoming tasks"
-            badge={
-              stats.plantsNeedingToday > 0
-                ? { label: `${stats.plantsNeedingToday} due`, urgent: true }
-                : undefined
-            }
-          />
-          <Rule />
-          <View style={{ gap: 0 }}>
-            {upcomingTasks.map((t, i) => (
-              <TaskRow key={t.id} task={t} index={i} />
-            ))}
+      <Animated.View style={[S.card, S.careScheduleCard, tasksSectionAnim]}>
+        <View style={S.careScheduleHead}>
+          <Text style={S.careScheduleTitle}>Tasks for Today</Text>
+          <Text style={S.careScheduleCount}>
+            {todaysCareTasks.length}{" "}
+            {todaysCareTasks.length === 1 ? "task" : "tasks"}
+          </Text>
+        </View>
+        <View style={S.rule} />
+
+        {todaysCareTasks.length === 0 ? (
+          <View style={S.emptyWrapCompact}>
+            <Ionicons name="calendar-outline" size={20} color={D.inkFaint} />
+            <Text style={S.faint}>No Tasks Scheduled</Text>
           </View>
-          <Mono style={{ textAlign: "center", marginTop: SP.sm }}>
-            tap to mark complete
-          </Mono>
-        </Animated.View>
-      ) : (
-        <Animated.View style={[S.card, S.emptyCard, tasksSectionAnim]}>
-          <View style={S.allDoneIcon}>
-            <Ionicons name="checkmark-done" size={20} color={D.forest} />
+        ) : (
+          <View>
+            {todaysCareTasks.map((task, index) => {
+              const meta = JOURNAL_TASK_STYLE[task.taskType];
+
+              return (
+                <Pressable
+                  key={task.id}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/tasks/[id]",
+                      params: {
+                        id: task.id,
+                        plantId: task.plantId,
+                        plantName: task.plantName,
+                        title: task.title,
+                        taskType: task.taskType,
+                        time: task.time,
+                        frequency: task.frequency as Frequency,
+                        status: task.status,
+                        notes: task.notes ?? "",
+                        dateKey: task.dateKey,
+                      },
+                    })
+                  }
+                  style={S.journalTaskRowPressable}
+                >
+                  <View
+                    style={[
+                      S.journalTaskRow,
+                      { flex: 1 },
+                      task.status === "completed" && S.journalTaskRowChecked,
+                      index === todaysCareTasks.length - 1 && {
+                        borderBottomWidth: 0,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        S.journalLeftStripe,
+                        { backgroundColor: meta.color },
+                        task.status === "completed" &&
+                          S.journalLeftStripeChecked,
+                      ]}
+                    />
+
+                    <View
+                      style={[
+                        S.journalIconBubble,
+                        { backgroundColor: D.leafBg },
+                      ]}
+                    >
+                      <Ionicons
+                        name={meta.icon as any}
+                        size={14}
+                        color={meta.color}
+                      />
+                    </View>
+
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text
+                        style={[
+                          S.journalTaskTitle,
+                          task.status === "completed" &&
+                            S.journalTaskTitleChecked,
+                        ]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {task.title?.trim() || `${meta.label} task`}
+                      </Text>
+                      <Text
+                        style={[
+                          S.journalTaskMeta,
+                          task.status === "completed" &&
+                            S.journalTaskMetaChecked,
+                        ]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {(task.plantName?.trim() || "Plant") +
+                          " · " +
+                          prettyTime(task.time || "09:00") +
+                          " · " +
+                          (task.frequency || "once")}
+                      </Text>
+                    </View>
+
+                    <View style={S.journalTaskRightActions}>
+                      <Pressable
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          void toggleTaskStatus(task.id, task.status);
+                        }}
+                        style={[
+                          S.journalIconBtn,
+                          task.status === "completed" &&
+                            S.journalIconBtnChecked,
+                        ]}
+                      >
+                        <Ionicons
+                          name={
+                            task.status === "completed"
+                              ? "checkmark-circle"
+                              : "ellipse-outline"
+                          }
+                          size={24}
+                          color={
+                            task.status === "completed" ? D.forest : D.inkFaint
+                          }
+                        />
+                      </Pressable>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
-          <Text style={S.emptyTitle}>all caught up</Text>
-          <Text style={S.faint}>no pending tasks — well tended!</Text>
-        </Animated.View>
-      )}
+        )}
+      </Animated.View>
     </ScrollView>
   );
 }
@@ -811,15 +965,14 @@ const S = StyleSheet.create({
   forecastTemp: { fontFamily: "System", fontSize: 10, color: D.ink },
 
   // ── Task rows
-  taskRow: {
+  journalTaskRow: {
     flexDirection: "row",
+    gap: 12,
     alignItems: "center",
-    gap: SP.sm,
-    paddingVertical: SP.sm,
-    paddingRight: SP.sm,
     borderBottomWidth: 1,
-    borderBottomColor: D.paperRule,
-    overflow: "hidden",
+    borderBottomColor: "#FAFAF8",
+    paddingVertical: 13,
+    borderRadius: 12,
   },
   taskRowOverdue: { backgroundColor: "rgba(196,98,58,0.04)" },
   taskStripe: { width: 3, height: 36, borderRadius: 2, flexShrink: 0 },
@@ -862,5 +1015,105 @@ const S = StyleSheet.create({
     backgroundColor: D.leafBg,
     alignItems: "center",
     justifyContent: "center",
+  },
+  emptyWrapCompact: {
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 20,
+  },
+
+  careScheduleCard: {
+    borderRadius: 28,
+    padding: 18,
+    gap: 14,
+  },
+  careScheduleHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  careScheduleTitle: {
+    fontFamily: "SpaceMono",
+    fontSize: 15,
+    color: D.ink,
+    fontWeight: "600" as const,
+  },
+  careScheduleCount: {
+    fontFamily: "SpaceMono",
+    fontSize: 11,
+    color: D.inkFaint,
+  },
+  rule: {
+    height: 1,
+    backgroundColor: "#F5F0EB",
+  },
+
+  // ── Care schedule rows (journal design)
+  taskRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#FAFAF8",
+    paddingVertical: 13,
+    borderRadius: 12,
+  },
+  journalTaskRowPressable: {
+    flexDirection: "row",
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  journalTaskRowChecked: {
+    backgroundColor: "#FBFDFB",
+  },
+  journalLeftStripe: {
+    width: 4,
+    alignSelf: "stretch",
+    borderRadius: 99,
+  },
+  journalLeftStripeChecked: {
+    opacity: 0.45,
+  },
+  journalIconBubble: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  journalTaskTitle: {
+    fontFamily: "SpaceMono",
+    fontSize: 15,
+    color: D.ink,
+  },
+  journalTaskTitleChecked: {
+    color: "#5D6B61",
+    textDecorationLine: "line-through",
+  },
+  journalTaskMeta: {
+    fontFamily: "SpaceMono",
+    fontSize: 11,
+    color: D.inkFaint,
+    marginTop: 2,
+  },
+  journalTaskMetaChecked: {
+    color: "#9AA59D",
+  },
+  journalTaskRightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
+  },
+  journalIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F7FAF8",
+  },
+  journalIconBtnChecked: {
+    backgroundColor: "#EEF5F0",
   },
 });

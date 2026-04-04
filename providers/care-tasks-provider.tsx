@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 
+import { useAppToast } from "@/providers/app-toast-provider";
 import { useAuth } from "@/providers/auth-provider";
 import { useGarden } from "@/providers/garden-provider";
 import {
@@ -64,6 +65,7 @@ function addInterval(dateTime: Date, frequency?: string | null) {
 
 export function CareTasksProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const { showToast } = useAppToast();
   const { plants } = useGarden();
   const [rawTasks, setRawTasks] = useState<CareTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -165,9 +167,11 @@ export function CareTasksProvider({ children }: { children: React.ReactNode }) {
         await updateCareTaskDoc(taskId, { notificationId });
       }
 
+      showToast("Task added successfully");
+
       return taskId;
     },
-    [findPlantName, user],
+    [findPlantName, showToast, user],
   );
 
   const updateTask = useCallback(
@@ -231,8 +235,10 @@ export function CareTasksProvider({ children }: { children: React.ReactNode }) {
           await updateCareTaskDoc(taskId, { notificationId });
         }
       }
+
+      showToast("Task updated successfully");
     },
-    [rawTasks, user],
+    [rawTasks, showToast, user],
   );
 
   const deleteTask = useCallback(
@@ -243,8 +249,9 @@ export function CareTasksProvider({ children }: { children: React.ReactNode }) {
         await cancelTaskReminderNotification(currentTask.notificationId);
       }
       await deleteCareTaskDoc(taskId);
+      showToast("Task deleted");
     },
-    [rawTasks],
+    [rawTasks, showToast],
   );
 
   const markAsCompleted = useCallback(
@@ -283,8 +290,10 @@ export function CareTasksProvider({ children }: { children: React.ReactNode }) {
         };
         await addTask(nextTaskInput);
       }
+
+      showToast("Task completed");
     },
-    [addTask, rawTasks],
+    [addTask, rawTasks, showToast],
   );
 
   const markAsPending = useCallback(

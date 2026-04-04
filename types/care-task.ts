@@ -85,7 +85,22 @@ export const TASK_FREQUENCY_LABELS: Record<TaskFrequency, string> = {
 };
 
 export function getDefaultTaskTitle(taskType: TaskType, plantName: string) {
-  return `${TASK_TYPE_LABELS[taskType]} - ${plantName}`;
+  const cleanedPlantName = plantName.trim() || "your plant";
+
+  switch (taskType) {
+    case "watering":
+      return `Give ${cleanedPlantName} a good watering`;
+    case "fertilizing":
+      return `Feed ${cleanedPlantName} with fertilizer`;
+    case "pruning":
+      return `Prune and tidy ${cleanedPlantName}`;
+    case "repotting":
+      return `Repot ${cleanedPlantName} into fresh soil`;
+    case "note":
+      return `Add a care note for ${cleanedPlantName}`;
+    default:
+      return `${TASK_TYPE_LABELS[taskType]} care for ${cleanedPlantName}`;
+  }
 }
 
 export function deriveTaskStatus(

@@ -18,12 +18,21 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DS } from "@/constants/app-design-system";
 import type { Plant, UpsertPlantInput } from "@/features/garden/domain/plant";
 
+const C = {
+  paper: "#FAF9F7",
+  card: "#FFFFFF",
+  muted: "#8A9585",
+  text: "#0F1410",
+  leafBg: "#F0F7F2",
+  surfaceAlt: "#FFFBF7",
+  accentGreen: "#3A7C52",
+};
+
 type PlantFormProps = {
   initialPlant?: Plant;
   submitLabel: string;
   busy?: boolean;
   onSubmit: (input: UpsertPlantInput) => Promise<void>;
-  onDelete?: () => void;
 };
 
 export function PlantForm({
@@ -31,7 +40,6 @@ export function PlantForm({
   submitLabel,
   busy,
   onSubmit,
-  onDelete,
 }: PlantFormProps) {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState(initialPlant?.name ?? "");
@@ -140,11 +148,11 @@ export function PlantForm({
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
       <ScrollView
-        style={{ flex: 1, backgroundColor: DS.colors.bg }}
+        style={{ flex: 1, backgroundColor: C.paper }}
         contentContainerStyle={[
           styles.container,
           { flexGrow: 1 },
-          { paddingBottom: insets.bottom + DS.spacing.xxxl + 64 },
+          { paddingBottom: insets.bottom + DS.spacing.xxxl + 40 },
         ]}
         keyboardShouldPersistTaps="handled"
         scrollEnabled={true}
@@ -162,11 +170,7 @@ export function PlantForm({
             </View>
           ) : (
             <View style={styles.imagePlaceholder}>
-              <Ionicons
-                name="image-outline"
-                size={48}
-                color={DS.colors.textFaint}
-              />
+              <Ionicons name="image-outline" size={48} color={C.muted} />
               <Text style={styles.imagePlaceholderText}>Add a photo</Text>
             </View>
           )}
@@ -178,7 +182,7 @@ export function PlantForm({
                 pressed && styles.imageButtonPressed,
               ]}
             >
-              <Ionicons name="image" size={18} color={DS.colors.primary} />
+              <Ionicons name="image" size={18} color={C.accentGreen} />
               <Text style={styles.imageButtonText}>Gallery</Text>
             </Pressable>
             <Pressable
@@ -188,7 +192,7 @@ export function PlantForm({
                 pressed && styles.imageButtonPressed,
               ]}
             >
-              <Ionicons name="camera" size={18} color={DS.colors.primary} />
+              <Ionicons name="camera" size={18} color={C.accentGreen} />
               <Text style={styles.imageButtonText}>Camera</Text>
             </Pressable>
           </View>
@@ -204,7 +208,7 @@ export function PlantForm({
               value={name}
               onChangeText={setName}
               placeholder="Monstera"
-              placeholderTextColor={DS.colors.textFaint}
+              placeholderTextColor={C.muted}
               style={styles.input}
             />
           </View>
@@ -215,7 +219,7 @@ export function PlantForm({
               value={species}
               onChangeText={setSpecies}
               placeholder="Monstera deliciosa"
-              placeholderTextColor={DS.colors.textFaint}
+              placeholderTextColor={C.muted}
               style={styles.input}
             />
           </View>
@@ -232,7 +236,7 @@ export function PlantForm({
               onChangeText={setWateringFrequencyDays}
               keyboardType="number-pad"
               placeholder="7"
-              placeholderTextColor={DS.colors.textFaint}
+              placeholderTextColor={C.muted}
               style={styles.input}
             />
           </View>
@@ -243,7 +247,7 @@ export function PlantForm({
               value={notes}
               onChangeText={setNotes}
               placeholder="Sunlight, soil, reminders..."
-              placeholderTextColor={DS.colors.textFaint}
+              placeholderTextColor={C.muted}
               multiline
               style={[
                 styles.input,
@@ -267,23 +271,10 @@ export function PlantForm({
               pressed && valid && !busy && styles.submitButtonPressed,
             ]}
           >
-            <View style={styles.submitIconBadge}>
-              <Ionicons
-                name="leaf-outline"
-                size={16}
-                color={DS.colors.surface}
-              />
-            </View>
             <Text style={styles.submitButtonText}>
               {busy ? "Saving..." : submitLabel}
             </Text>
           </Pressable>
-
-          {onDelete ? (
-            <Pressable onPress={onDelete} style={styles.deleteButton}>
-              <Text style={styles.deleteButtonText}>Delete Plant</Text>
-            </Pressable>
-          ) : null}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -292,148 +283,124 @@ export function PlantForm({
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: DS.spacing.screenX,
-    paddingTop: DS.spacing.lg,
-    gap: DS.spacing.xl,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 16,
   },
   section: {
-    backgroundColor: DS.colors.surface,
-    borderRadius: DS.radius.lg,
+    backgroundColor: C.card,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: DS.colors.borderSoft,
-    padding: DS.spacing.lg,
-    gap: DS.spacing.lg,
-    ...DS.shadow.cardSoft,
+    borderColor: "#E8DFD6",
+    padding: 16,
+    gap: 12,
   },
   sectionLabel: {
-    ...DS.typography.mono,
+    fontFamily: "SpaceMono",
     fontSize: 11,
-    color: DS.colors.textFaint,
-    marginBottom: DS.spacing.xs,
+    color: C.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   fieldLabel: {
-    ...DS.typography.bodyStrong,
-    fontSize: 14,
-    color: DS.colors.text,
-    marginBottom: DS.spacing.sm,
+    fontFamily: "SpaceMono",
+    fontSize: 11,
+    color: C.muted,
+    marginBottom: 8,
+    textTransform: "uppercase",
   },
   input: {
-    borderWidth: 1,
-    borderColor: DS.colors.borderSoft,
-    borderRadius: DS.radius.md,
-    backgroundColor: DS.colors.bg,
-    paddingHorizontal: DS.spacing.md,
-    paddingVertical: DS.spacing.md,
-    color: DS.colors.text,
-    fontSize: 15,
-    fontFamily: "System",
+    borderWidth: 1.2,
+    borderColor: "#E8DFD6",
+    borderRadius: 16,
+    backgroundColor: C.surfaceAlt,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    color: C.text,
+    fontSize: 14,
+    fontFamily: "SpaceMono",
     minHeight: 50,
   },
   image: {
     width: "100%",
     height: 200,
-    borderRadius: DS.radius.md,
-    backgroundColor: DS.colors.surfaceAlt,
-    marginBottom: DS.spacing.sm,
+    borderRadius: 20,
+    backgroundColor: C.surfaceAlt,
+    marginBottom: 8,
   },
   imagePlaceholder: {
     width: "100%",
     height: 200,
-    borderRadius: DS.radius.md,
+    borderRadius: 20,
     borderWidth: 2,
-    borderColor: DS.colors.borderSoft,
+    borderColor: "#E8DFD6",
     borderStyle: "dashed",
-    backgroundColor: DS.colors.bg,
+    backgroundColor: C.surfaceAlt,
     alignItems: "center",
     justifyContent: "center",
-    gap: DS.spacing.md,
-    marginBottom: DS.spacing.sm,
+    gap: 10,
+    marginBottom: 8,
   },
   imagePlaceholderText: {
-    ...DS.typography.body,
-    color: DS.colors.textFaint,
-    fontSize: 14,
+    fontFamily: "SpaceMono",
+    color: C.muted,
+    fontSize: 13,
   },
   imageButtonsRow: {
     flexDirection: "row",
-    gap: DS.spacing.md,
+    gap: 10,
   },
   imageButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: DS.spacing.sm,
-    backgroundColor: DS.colors.primarySoft,
+    gap: 6,
+    backgroundColor: C.leafBg,
     borderWidth: 1,
-    borderColor: DS.colors.borderSoft,
-    borderRadius: DS.radius.md,
-    paddingVertical: DS.spacing.md,
+    borderColor: "#D8E8DE",
+    borderRadius: 14,
+    paddingVertical: 12,
   },
   imageButtonPressed: {
     opacity: 0.8,
   },
   imageButtonText: {
-    ...DS.typography.bodyStrong,
-    color: DS.colors.primary,
-    fontSize: 14,
+    fontFamily: "SpaceMono",
+    color: C.accentGreen,
+    fontSize: 12,
   },
   actionSection: {
-    gap: DS.spacing.md,
-    marginTop: DS.spacing.md,
+    gap: 10,
+    marginTop: 2,
   },
   submitButton: {
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: DS.spacing.sm,
-    minHeight: 54,
-    borderWidth: 1,
-    borderColor: DS.colors.primary,
-    borderRadius: DS.radius.md,
-    backgroundColor: DS.colors.primary,
-    paddingHorizontal: DS.spacing.lg,
-    paddingVertical: DS.spacing.md,
-    ...DS.shadow.cardSoft,
-  },
-  submitIconBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: DS.radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 16,
+    backgroundColor: C.accentGreen,
+    paddingVertical: 15,
   },
   submitButtonText: {
-    ...DS.typography.bodyStrong,
-    color: DS.colors.surface,
-    fontSize: 15,
-    letterSpacing: 0.2,
-    fontWeight: "700",
+    fontFamily: "SpaceMono",
+    color: "#FFFFFF",
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
   },
   submitButtonDisabled: {
     opacity: 0.55,
-    borderColor: DS.colors.borderSoft,
-    backgroundColor: DS.colors.textFaint,
+    borderColor: "#D9D1C8",
+    backgroundColor: C.muted,
   },
   submitButtonPressed: {
     opacity: 0.9,
   },
-  deleteButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: DS.spacing.md,
-  },
-  deleteButtonText: {
-    ...DS.typography.bodyStrong,
-    color: DS.colors.danger,
-    fontSize: 15,
-    fontWeight: "700",
-  },
   error: {
-    ...DS.typography.body,
-    color: DS.colors.danger,
-    paddingHorizontal: DS.spacing.lg,
-    paddingVertical: DS.spacing.md,
+    fontFamily: "SpaceMono",
+    color: "#C4623A",
+    fontSize: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
   },
 });

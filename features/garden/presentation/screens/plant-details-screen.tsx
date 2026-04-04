@@ -2,50 +2,69 @@ import { useFadeUp } from "@/hooks/use-screen-animations";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Alert,
   Animated,
   Pressable,
-  ScrollView,
+  SafeAreaView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AppButton } from "@/components/ui/app-button";
-import { AppCard } from "@/components/ui/app-card";
-import { AppListItem } from "@/components/ui/app-list-item";
-import { AppText } from "@/components/ui/app-text";
-import { P, SP, TY } from "@/constants/herbarium-theme";
+import { SP } from "@/constants/herbarium-theme";
 import { formatWateringLabel } from "@/features/garden/application/plant-utils";
-import type { Plant, PlantCareAction } from "@/features/garden/domain/plant";
-import { HistoryLogItem } from "@/features/garden/presentation/components/history-log-item";
+import type { Plant } from "@/features/garden/domain/plant";
+import { useCareTasks } from "@/providers/care-tasks-provider";
 import { useGarden } from "../../../../providers/garden-provider";
 
 const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1463320726281-696a485928c7?auto=format&fit=crop&w=600&q=60";
 
-const ACTIONS: Array<{ action: PlantCareAction; label: string; icon: string }> =
-  [
-    { action: "watered", label: "Watered", icon: "water-outline" },
-    { action: "fertilized", label: "Fertilized", icon: "flask-outline" },
-    { action: "pruned", label: "Pruned", icon: "cut-outline" },
-    { action: "note", label: "Note", icon: "create-outline" },
-  ];
+const C = {
+  paper: "#FAF9F7",
+  card: "#FFFFFF",
+  border: "#EBE4DC",
+  muted: "#8A9585",
+  text: "#0F1410",
+  green: "#2D6344",
+  sage: "#5C8B6E",
+  amber: "#B87A2A",
+  terracotta: "#C4623A",
+  leafBg: "#F0F7F2",
+  rowBorder: "#F5F0EB",
+  offWhite: "#FEFDFB",
+  accentGreen: "#3A7C52",
+};
 
 export function PlantDetailsScreen({ plant }: { plant: Plant }) {
-  const { addHistoryLog, schedules, deletePlant } = useGarden();
+  const { deletePlant } = useGarden();
+  const { tasks: careTasks } = useCareTasks();
   const insets = useSafeAreaInsets();
-  const [note, setNote] = useState("");
-  const [busyAction, setBusyAction] = useState<PlantCareAction | null>(null);
+  const contentAnim = useFadeUp(0);
   const [busyDelete, setBusyDelete] = useState(false);
 
-  const plantSchedules = schedules
-    .filter((item) => item.plantId === plant.id && item.status === "pending")
-    .sort((a, b) => +new Date(a.dueAt) - +new Date(b.dueAt));
+  const plantTaskData = useMemo(() => {
+    const normalized = careTasks
+      .filter((task) => task.plantId === plant.id)
+      .sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime())
+      .map((task) => ({
+        ...task,
+        frequency: task.isRecurring ? (task.frequency ?? "weekly") : "once",
+        time: `${String(task.dateTime.getHours()).padStart(2, "0")}:${String(
+          task.dateTime.getMinutes(),
+        ).padStart(2, "0")}`,
+      }));
+
+    const upcoming = normalized.filter((task) => task.status === "pending");
+    const history = normalized
+      .filter((task) => task.status !== "pending")
+      .sort((a, b) => b.dateTime.getTime() - a.dateTime.getTime());
+
+    return { upcoming, history };
+  }, [careTasks, plant.id]);
 
   const onDelete = () => {
     Alert.alert("Delete plant", "This action cannot be undone.", [
@@ -66,16 +85,6 @@ export function PlantDetailsScreen({ plant }: { plant: Plant }) {
     ]);
   };
 
-  const logAction = async (action: PlantCareAction) => {
-    setBusyAction(action);
-    try {
-      await addHistoryLog(plant.id, action, note || undefined);
-      setNote("");
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
   const onBack = () => {
     if (router.canGoBack()) {
       router.back();
@@ -84,36 +93,67 @@ export function PlantDetailsScreen({ plant }: { plant: Plant }) {
     router.replace("/(tabs)" as never);
   };
 
+  const lastWatered = plant.lastWateredAt
+    ? new Date(plant.lastWateredAt).toLocaleDateString()
+    : "Not yet";
+
+  const prettyTime = (time24: string) => {
+    const [h, m] = time24.split(":").map(Number);
+    const suffix = h >= 12 ? "pm" : "am";
+    const hour12 = h % 12 || 12;
+    return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
+  };
+
+  const formatTaskDateTime = (value: Date) => {
+    return value.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  };
+
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: P.p1 }}
-      contentContainerStyle={[
-        styles.container,
-        {
-          paddingTop: insets.top + SP.md,
-          paddingBottom: insets.bottom + SP.xxxl + 64,
-        },
-      ]}
-    >
-      <Animated.View style={useFadeUp(0)}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={16} color={P.i1} />
-          <AppText variant="bodyStrong" style={styles.backText}>
-            Back
-          </AppText>
+    <SafeAreaView style={styles.screen}>
+      <View style={styles.header}>
+        <Pressable onPress={onBack} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={24} color={C.accentGreen} />
         </Pressable>
+        <Text style={styles.headerTitle}>Plant Details</Text>
+        <Pressable
+          onPress={() => router.push(`/plants/${plant.id}/edit` as never)}
+          style={styles.backBtn}
+        >
+          <Ionicons name="create-outline" size={20} color={C.accentGreen} />
+        </Pressable>
+      </View>
 
-        <Image
-          source={{ uri: plant.imageUri ?? FALLBACK_IMAGE }}
-          style={styles.heroImage}
-          contentFit="cover"
-        />
+      <Animated.ScrollView
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingBottom: insets.bottom + SP.xxxl + 40,
+          },
+        ]}
+        style={contentAnim}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.card}>
+          <Image
+            source={{ uri: plant.imageUri ?? FALLBACK_IMAGE }}
+            style={styles.heroImage}
+            contentFit="cover"
+          />
 
-        <AppCard>
-          <AppText variant="display" style={styles.name}>
-            {plant.name}
-          </AppText>
-          <AppText style={styles.species}>{plant.species}</AppText>
+          <View style={styles.plantHeadRow}>
+            <View style={styles.plantIconBubble}>
+              <Ionicons name="leaf-outline" size={22} color={C.accentGreen} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.plantSpecies}>{plant.species}</Text>
+              <Text style={styles.plantName}>{plant.name}</Text>
+            </View>
+          </View>
+
+          <View style={styles.rule} />
 
           <View style={styles.metaGrid}>
             <Meta label="Date planted" value={plant.datePlanted} />
@@ -122,48 +162,17 @@ export function PlantDetailsScreen({ plant }: { plant: Plant }) {
               value={`${plant.wateringFrequencyDays} days`}
             />
             <Meta label="Next watering" value={formatWateringLabel(plant)} />
-            <Meta
-              label="Last watered"
-              value={
-                plant.lastWateredAt
-                  ? new Date(plant.lastWateredAt).toLocaleDateString()
-                  : "Not yet"
-              }
-            />
+            <Meta label="Last watered" value={lastWatered} />
           </View>
 
           {plant.notes ? (
-            <View style={styles.notesWrap}>
-              <AppText variant="mono" style={styles.sectionLabel}>
-                Notes
-              </AppText>
-              <AppText style={styles.notes}>{plant.notes}</AppText>
-            </View>
+            <Text style={styles.plantNotes}>{plant.notes}</Text>
           ) : null}
+        </View>
 
-          <AppButton
-            onPress={() => router.push(`/plants/${plant.id}/edit` as never)}
-            variant="primary"
-            label="Edit plant"
-            leftIcon={<Ionicons name="create-outline" size={16} color={P.p0} />}
-          />
-
-          <AppButton
-            onPress={onDelete}
-            containerStyle={[busyDelete && { opacity: 0.7 }]}
-            disabled={busyDelete}
-            variant="danger"
-            label={busyDelete ? "Deleting..." : "Delete plant"}
-            leftIcon={
-              <Ionicons name="trash-outline" size={16} color={P.rust} />
-            }
-          />
-        </AppCard>
-
-        <AppCard>
-          <AppText variant="title" style={styles.sectionTitle}>
-            Care Instructions
-          </AppText>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Care Instructions</Text>
+          <View style={styles.rule} />
           <View style={styles.metaGrid}>
             <Meta
               label="Watering frequency"
@@ -174,78 +183,118 @@ export function PlantDetailsScreen({ plant }: { plant: Plant }) {
               value={plant.notes?.trim() || "No care notes added yet."}
             />
           </View>
-        </AppCard>
+        </View>
 
-        <AppCard>
-          <AppText variant="title" style={styles.sectionTitle}>
-            Upcoming Schedule
-          </AppText>
-          <View style={{ gap: SP.sm }}>
-            {plantSchedules.length === 0 ? (
-              <AppText style={styles.emptyHistory}>
-                No scheduled tasks yet.
-              </AppText>
-            ) : (
-              plantSchedules.map((item) => (
-                <AppListItem
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Upcoming Schedule</Text>
+          <View style={styles.rule} />
+
+          {plantTaskData.upcoming.length === 0 ? (
+            <View style={styles.emptyWrap}>
+              <Ionicons name="calendar-outline" size={20} color={C.muted} />
+              <Text style={styles.emptyText}>No scheduled tasks yet.</Text>
+            </View>
+          ) : (
+            <View>
+              {plantTaskData.upcoming.map((item, index) => (
+                <View
                   key={item.id}
-                  title={
-                    item.taskType.charAt(0).toUpperCase() +
-                    item.taskType.slice(1)
-                  }
-                  subtitle={new Date(item.dueAt).toLocaleString()}
-                />
-              ))
-            )}
-          </View>
-        </AppCard>
+                  style={[
+                    styles.scheduleRow,
+                    index === plantTaskData.upcoming.length - 1 && {
+                      borderBottomWidth: 0,
+                    },
+                  ]}
+                >
+                  <View style={styles.scheduleIconWrap}>
+                    <Ionicons
+                      name="time-outline"
+                      size={14}
+                      color={C.accentGreen}
+                    />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.scheduleTitle} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.scheduleMeta} numberOfLines={1}>
+                      {prettyTime(item.time)} · {item.frequency} ·{" "}
+                      {formatTaskDateTime(item.dateTime)}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
 
-        <AppCard>
-          <AppText variant="title" style={styles.sectionTitle}>
-            Care History
-          </AppText>
-
-          <TextInput
-            value={note}
-            onChangeText={setNote}
-            placeholder="Optional note for next log"
-            placeholderTextColor={P.i3}
-            style={styles.input}
-          />
-
-          <View style={styles.actionRow}>
-            {ACTIONS.map((item) => (
-              <Pressable
-                key={item.action}
-                onPress={() => logAction(item.action)}
-                style={({ pressed }) => [
-                  styles.actionButton,
-                  pressed && { opacity: 0.9 },
-                ]}
-                disabled={busyAction !== null}
-              >
-                <Ionicons name={item.icon as any} size={14} color={P.g1} />
-                <Text style={styles.actionText}>
-                  {busyAction === item.action ? "Saving..." : item.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Care History</Text>
+          <View style={styles.rule} />
 
           <View style={{ gap: SP.sm }}>
-            {plant.history.length === 0 ? (
-              <AppText style={styles.emptyHistory}>
-                No history logs yet.
-              </AppText>
+            {plantTaskData.history.length === 0 ? (
+              <Text style={styles.emptyText}>No history logs yet.</Text>
             ) : (
-              plant.history.map((entry) => (
-                <HistoryLogItem key={entry.id} log={entry} />
+              plantTaskData.history.slice(0, 8).map((item, index) => (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.scheduleRow,
+                    index === plantTaskData.history.slice(0, 8).length - 1 && {
+                      borderBottomWidth: 0,
+                    },
+                  ]}
+                >
+                  <View style={styles.scheduleIconWrap}>
+                    <Ionicons
+                      name={
+                        item.status === "completed"
+                          ? "checkmark-circle"
+                          : "alert-circle-outline"
+                      }
+                      size={14}
+                      color={
+                        item.status === "completed"
+                          ? C.accentGreen
+                          : C.terracotta
+                      }
+                    />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.scheduleTitle} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.scheduleMeta} numberOfLines={1}>
+                      {item.status} · {prettyTime(item.time)} ·{" "}
+                      {formatTaskDateTime(item.dateTime)}
+                    </Text>
+                  </View>
+                </View>
               ))
             )}
           </View>
-        </AppCard>
-      </Animated.View>
-    </ScrollView>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.actionsGrid}>
+            <Pressable
+              style={[
+                styles.actionDeleteMinimal,
+                busyDelete && { opacity: 0.6 },
+              ]}
+              onPress={onDelete}
+              disabled={busyDelete}
+            >
+              <Ionicons name="trash-outline" size={16} color={C.terracotta} />
+              <Text style={styles.actionDeleteText}>
+                {busyDelete ? "Deleting..." : "Delete plant"}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Animated.ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -259,109 +308,159 @@ function Meta({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: SP.lg,
-    gap: SP.lg,
+  screen: {
+    flex: 1,
+    backgroundColor: C.paper,
   },
-  backButton: {
-    alignSelf: "flex-start",
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: P.p0,
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: C.paper,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0E9E1",
+  },
+  headerTitle: {
+    fontFamily: "SpaceMono",
+    fontSize: 17,
+    color: C.text,
+    fontWeight: "600",
+  },
+  backBtn: { padding: 8, alignItems: "center", justifyContent: "center" },
+  content: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 16,
+  },
+  card: {
+    backgroundColor: C.card,
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: P.hair,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    borderColor: "#C8C0B4",
+    padding: 18,
+    gap: 14,
   },
-  backText: {
-    ...TY.body,
-    color: P.i1,
-    fontWeight: "700",
-  },
+  rule: { height: 1, backgroundColor: "#F5F0EB" },
   heroImage: {
     width: "100%",
     height: 220,
     borderRadius: 20,
-    backgroundColor: P.p2,
+    backgroundColor: C.offWhite,
   },
-  name: {
-    ...TY.display,
-    fontSize: 32,
+  plantHeadRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
-  species: {
-    ...TY.body,
-    color: P.i3,
-    marginTop: -6,
+  plantIconBubble: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: C.leafBg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  plantSpecies: {
+    fontFamily: "SpaceMono",
+    fontSize: 12,
+    color: C.muted,
+  },
+  plantName: {
+    fontFamily: "SpaceMono",
+    fontSize: 24,
+    color: C.text,
+    marginTop: 2,
   },
   metaGrid: {
     gap: SP.sm,
   },
   metaItem: {
-    padding: SP.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderWidth: 1,
-    borderColor: P.hair,
+    borderColor: "#E5DED5",
     borderRadius: 12,
-    backgroundColor: P.p1,
+    backgroundColor: "#FFFBF7",
     gap: 4,
   },
   metaLabel: {
-    ...TY.monoLabel,
-    fontSize: 9,
+    fontFamily: "SpaceMono",
+    fontSize: 10,
+    color: C.muted,
+    textTransform: "uppercase",
   },
   metaValue: {
-    ...TY.body,
-    color: P.i1,
-    fontWeight: "700",
+    fontFamily: "SpaceMono",
+    fontSize: 13,
+    color: C.text,
+    fontWeight: "500",
   },
-  notesWrap: {
-    gap: 6,
-  },
-  sectionLabel: {
-    ...TY.monoLabel,
-    fontSize: 9,
-  },
-  notes: {
-    ...TY.body,
-    color: P.i2,
+  plantNotes: {
+    fontFamily: "SpaceMono",
+    fontSize: 13,
+    color: C.text,
+    lineHeight: 19,
   },
   sectionTitle: {
-    ...TY.display,
-    fontSize: 22,
+    fontFamily: "SpaceMono",
+    fontSize: 15,
+    color: C.text,
+    fontWeight: "600",
   },
-  input: {
-    borderWidth: 1,
-    borderColor: P.sketch,
-    borderRadius: 12,
-    backgroundColor: P.p1,
-    paddingHorizontal: SP.md,
-    paddingVertical: 11,
-    color: P.i1,
+  emptyWrap: {
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 20,
   },
-  actionRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: SP.sm,
+  emptyText: {
+    fontFamily: "SpaceMono",
+    fontSize: 13,
+    color: C.muted,
   },
-  actionButton: {
+  scheduleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: P.gBg,
-    borderWidth: 1,
-    borderColor: "rgba(43,125,70,0.22)",
-    borderRadius: 999,
-    paddingHorizontal: SP.md,
-    paddingVertical: 9,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: C.rowBorder,
+    paddingVertical: 12,
   },
-  actionText: {
-    ...TY.body,
-    color: P.g1,
-    fontWeight: "700",
+  scheduleIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: C.leafBg,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  emptyHistory: {
-    ...TY.body,
-    color: P.i3,
+  scheduleTitle: {
+    fontFamily: "SpaceMono",
+    fontSize: 14,
+    color: C.text,
+  },
+  scheduleMeta: {
+    fontFamily: "SpaceMono",
+    fontSize: 11,
+    color: C.muted,
+    marginTop: 2,
+  },
+  actionsGrid: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+  },
+  actionDeleteMinimal: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "transparent",
+    paddingVertical: 2,
+    paddingHorizontal: 0,
+  },
+  actionDeleteText: {
+    fontFamily: "SpaceMono",
+    color: C.terracotta,
+    fontSize: 11,
   },
 });

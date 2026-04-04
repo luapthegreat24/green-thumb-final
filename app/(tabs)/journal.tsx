@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Easing,
   Modal,
   Pressable,
   SafeAreaView,
@@ -14,12 +15,21 @@ import {
   View,
 } from "react-native";
 
-type TaskType = "watering" | "fertilizing" | "pruning" | "repotting" | "note";
-type TaskStatus = "pending" | "completed";
-type Frequency = "once" | "daily" | "weekly" | "monthly";
+import { AppToast } from "@/components/ui/app-toast";
+import { useCareTasks } from "@/providers/care-tasks-provider";
+import { useGarden } from "@/providers/garden-provider";
+import {
+  getDefaultTaskTitle,
+  type TaskFrequency,
+  type TaskStatus,
+  type TaskType,
+} from "@/types/care-task";
+
+type Frequency = "once" | TaskFrequency;
 
 type ScheduleItem = {
   id: string;
+  plantId: string;
   plantName: string;
   title: string;
   taskType: TaskType;
@@ -64,41 +74,15 @@ const TASK_TYPES: TaskType[] = [
   "repotting",
   "note",
 ];
-const FREQUENCIES: Frequency[] = ["once", "daily", "weekly", "monthly"];
+const FREQUENCIES: Frequency[] = ["once", "daily", "weekly"];
 const FREQUENCIES_DISPLAY: Record<Frequency, string> = {
   once: "Once",
   daily: "Daily",
   weekly: "Weekly",
-  monthly: "Monthly",
 };
 const WEEK_CHIP_WIDTH = 92;
 const WEEK_CHIP_GAP = 10;
 const WEEK_SNAP = WEEK_CHIP_WIDTH + WEEK_CHIP_GAP;
-
-function buildWeekDays() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    const key = d.toISOString().slice(0, 10);
-    return {
-      key,
-      dayNum: d.getDate(),
-      dayShort: d
-        .toLocaleDateString("en-US", { weekday: "short" })
-        .toLowerCase(),
-      label: d
-        .toLocaleDateString("en-US", {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-        })
-        .toLowerCase(),
-    };
-  });
-}
 
 function prettyTime(time24: string) {
   const [h, m] = time24.split(":").map(Number);
@@ -107,57 +91,102 @@ function prettyTime(time24: string) {
   return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
-function seedTasks(week: ReturnType<typeof buildWeekDays>): ScheduleItem[] {
-  return [
-    {
-      id: "t1",
-      plantName: "Monstera",
-      title: "Water the monstera",
-      taskType: "watering",
-      dateKey: week[0].key,
-      time: "08:30",
-      frequency: "weekly",
-      status: "pending",
-    },
-    {
-      id: "t2",
-      plantName: "Snake plant",
-      title: "Light feed",
-      taskType: "fertilizing",
-      dateKey: week[1].key,
-      time: "10:00",
-      frequency: "monthly",
-      status: "pending",
-    },
-    {
-      id: "t3",
-      plantName: "Pothos",
-      title: "Trim long vines",
-      taskType: "pruning",
-      dateKey: week[0].key,
-      time: "14:15",
-      frequency: "once",
-      status: "completed",
-    },
-  ];
+function normalizePlantName(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 export default function JournalScreen() {
   const router = useRouter();
-  const week = useMemo(() => buildWeekDays(), []);
+  const { plants: userPlants } = useGarden();
+  const {
+    tasks: backendTasks,
+    addTask: addCareTask,
+    markAsCompleted,
+    markAsPending,
+    loading: tasksLoading,
+    error: tasksError,
+  } = useCareTasks();
+
+  // Helper function to get start of current week (Monday)
+  const getWeekStart = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const day = today.getDay();
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+    const weekStart = new Date(today);
+    weekStart.setDate(diff);
+    return weekStart;
+  };
+
+  const actualToday = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today.toISOString().slice(0, 10);
+  }, []);
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  // Generate current week (7 days, Monday-Sunday)
+  const week = useMemo(() => {
+    const weekStart = getWeekStart();
+    weekStart.setDate(weekStart.getDate() + weekOffset * 7);
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      days.push({
+        key,
+        dayNum: d.getDate(),
+        dayShort: d
+          .toLocaleDateString("en-US", { weekday: "short" })
+          .toLowerCase(),
+        label: d
+          .toLocaleDateString("en-US", {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+          })
+          .toLowerCase(),
+      });
+    }
+    return days;
+  }, [weekOffset]);
   const weekScrollX = useRef(new Animated.Value(0)).current;
   const weekScrollRef = useRef<ScrollView>(null);
   const mainScrollRef = useRef<ScrollView>(null);
   const formRef = useRef<View>(null);
-  const formOpacity = useRef(new Animated.Value(0)).current;
-  const tasksOpacity = useRef(new Animated.Value(0)).current;
-  const taskAnimations = useRef<Animated.Value[]>([]);
+
+  // Initialize formOpacity to 0 (form hidden initially)
+  const formOpacityRef = useRef<Animated.Value | null>(null);
+  const formTranslateYRef = useRef<Animated.Value | null>(null);
+  const formScaleRef = useRef<Animated.Value | null>(null);
+  if (!formOpacityRef.current) {
+    formOpacityRef.current = new Animated.Value(0);
+  }
+  if (!formTranslateYRef.current) {
+    formTranslateYRef.current = new Animated.Value(14);
+  }
+  if (!formScaleRef.current) {
+    formScaleRef.current = new Animated.Value(0.98);
+  }
+  const formOpacity = formOpacityRef.current;
+  const formTranslateY = formTranslateYRef.current;
+  const formScale = formScaleRef.current;
+  const taskAnimations = useRef<Record<string, Animated.Value>>({});
+  const checkAnimations = useRef<Record<string, Animated.Value>>({});
+  const celebrateAnimations = useRef<Record<string, Animated.Value>>({});
+  const previousAnimatedDate = useRef<string>("");
   const [formYPosition, setFormYPosition] = useState(0);
-  const [selectedDate, setSelectedDate] = useState(week[0].key);
-  const [tasks, setTasks] = useState<ScheduleItem[]>(() => seedTasks(week));
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const hasTodayInWeek = week.some((d) => d.key === actualToday);
+    return hasTodayInWeek ? actualToday : (week[0]?.key ?? actualToday);
+  });
   const [showForm, setShowForm] = useState(false);
+  const [renderForm, setRenderForm] = useState(false);
 
   const [plantName, setPlantName] = useState("");
+  const [selectedPlantId, setSelectedPlantId] = useState<string | null>(null);
+  const [showPlantSuggestions, setShowPlantSuggestions] = useState(false);
   const [title, setTitle] = useState("");
   const [taskType, setTaskType] = useState<TaskType>("watering");
   const [time, setTime] = useState("09:00");
@@ -165,9 +194,113 @@ export default function JournalScreen() {
   const [notes, setNotes] = useState("");
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [pickerDate, setPickerDate] = useState(new Date(2025, 0, 1, 9, 0));
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [invalidFields, setInvalidFields] = useState({
+    plantName: false,
+    title: false,
+  });
+  const selectingSuggestionRef = useRef(false);
+  const lastAutoTitleRef = useRef("");
+
+  // Filter plants based on user input
+  const filteredPlants = useMemo(() => {
+    const trimmed = plantName.toLowerCase().trim();
+    if (!trimmed) return userPlants;
+    return userPlants.filter(
+      (plant) =>
+        plant.name.toLowerCase().includes(trimmed) ||
+        plant.species.toLowerCase().includes(trimmed),
+    );
+  }, [plantName, userPlants]);
+
+  const handleSelectPlant = (plant: (typeof userPlants)[0]) => {
+    selectingSuggestionRef.current = true;
+    setSelectedPlantId(plant.id);
+    setPlantName(plant.name);
+    setInvalidFields((prev) => ({ ...prev, plantName: false }));
+    setShowPlantSuggestions(false);
+    setTimeout(() => {
+      selectingSuggestionRef.current = false;
+    }, 200);
+  };
+
+  const defaultTaskTitle = useMemo(
+    () => getDefaultTaskTitle(taskType, plantName.trim() || "Plant"),
+    [plantName, taskType],
+  );
+
+  useEffect(() => {
+    setTitle((currentTitle) => {
+      const trimmedTitle = currentTitle.trim();
+      const shouldAutofill =
+        trimmedTitle.length === 0 || trimmedTitle === lastAutoTitleRef.current;
+
+      if (!shouldAutofill || currentTitle === defaultTaskTitle) {
+        return currentTitle;
+      }
+
+      lastAutoTitleRef.current = defaultTaskTitle;
+      return defaultTaskTitle;
+    });
+  }, [defaultTaskTitle]);
+
+  const tasks = useMemo<ScheduleItem[]>(
+    () =>
+      backendTasks.map((task) => {
+        const dateTime = task.dateTime;
+        const recurringFrequency = task.frequency ?? "weekly";
+        const frequency: Frequency = task.isRecurring
+          ? recurringFrequency
+          : "once";
+
+        return {
+          id: task.id,
+          plantId: task.plantId,
+          plantName: task.plantName,
+          title: task.title,
+          taskType: task.taskType,
+          dateKey: dateTime.toISOString().slice(0, 10),
+          time: `${String(dateTime.getHours()).padStart(2, "0")}:${String(
+            dateTime.getMinutes(),
+          ).padStart(2, "0")}`,
+          frequency,
+          status: task.status,
+          notes: task.notes,
+        };
+      }),
+    [backendTasks],
+  );
 
   const selectedLabel =
     week.find((d) => d.key === selectedDate)?.label ?? "today";
+
+  const weekRangeLabel = useMemo(() => {
+    const start = week[0];
+    const end = week[6];
+    if (!start || !end) return "";
+
+    const startDate = new Date(`${start.key}T00:00:00`);
+    const endDate = new Date(`${end.key}T00:00:00`);
+    const startText = startDate.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+    const endText = endDate.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+
+    return `${startText} - ${endText}`;
+  }, [week]);
+
+  const weekTitle = useMemo(() => {
+    if (weekOffset === 0) return "This Week";
+    if (weekOffset === 1) return "Next Week";
+    if (weekOffset === -1) return "Last Week";
+    if (weekOffset > 1) return `${weekOffset} Weeks Ahead`;
+    return `${Math.abs(weekOffset)} Weeks Ago`;
+  }, [weekOffset]);
 
   const taskCountByDay = useMemo(() => {
     return tasks.reduce<Record<string, number>>((acc, task) => {
@@ -187,48 +320,92 @@ export default function JournalScreen() {
   const totalPending = tasks.filter((t) => t.status === "pending").length;
   const totalDone = tasks.filter((t) => t.status === "completed").length;
 
-  const addTask = () => {
-    if (!plantName.trim() || !title.trim()) return;
+  const goToWeek = (delta: number) => {
+    const nextWeekStart = getWeekStart();
+    nextWeekStart.setDate(nextWeekStart.getDate() + (weekOffset + delta) * 7);
+    const nextWeekEnd = new Date(nextWeekStart);
+    nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
 
-    setTasks((prev) => [
-      ...prev,
-      {
-        id: String(Date.now()),
-        plantName: plantName.trim(),
-        title: title.trim(),
-        taskType,
-        dateKey: selectedDate,
-        time,
-        frequency,
-        status: "pending",
-        notes: notes.trim() || undefined,
-      },
-    ]);
+    const nextStartKey = nextWeekStart.toISOString().slice(0, 10);
+    const nextEndKey = nextWeekEnd.toISOString().slice(0, 10);
+    const includesToday =
+      actualToday >= nextStartKey && actualToday <= nextEndKey;
+    const nextKey = includesToday ? actualToday : nextStartKey;
 
-    setPlantName("");
-    setTitle("");
-    setTaskType("watering");
-    setTime("09:00");
-    setFrequency("once");
-    setNotes("");
-    setShowForm(false);
+    setWeekOffset((prev) => prev + delta);
+    setSelectedDate(nextKey);
   };
 
-  const toggleStatus = (id: string) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              status: t.status === "pending" ? "completed" : "pending",
-            }
-          : t,
-      ),
+  const addTask = async () => {
+    const trimmedPlantName = plantName.trim();
+    const trimmedTitle = title.trim();
+    const nextInvalidFields = {
+      plantName: trimmedPlantName.length === 0,
+      title: trimmedTitle.length === 0,
+    };
+
+    if (nextInvalidFields.plantName || nextInvalidFields.title) {
+      setInvalidFields(nextInvalidFields);
+      setToastMessage("Please fill in all required fields");
+      setToastVisible(true);
+      return;
+    }
+
+    const normalizedPlantName = normalizePlantName(trimmedPlantName);
+    const matchedPlant = userPlants.find(
+      (plant) => normalizePlantName(plant.name) === normalizedPlantName,
     );
+
+    if (!matchedPlant || !normalizedPlantName) {
+      setInvalidFields((prev) => ({ ...prev, plantName: true }));
+      setToastMessage("Plant not found in your garden");
+      setToastVisible(true);
+      return;
+    }
+
+    const dateTime = new Date(`${selectedDate}T${time}:00`);
+    const plantId = matchedPlant.id;
+
+    try {
+      await addCareTask({
+        plantId,
+        plantName: matchedPlant.name,
+        taskType,
+        title: trimmedTitle,
+        dateTime,
+        isRecurring: frequency !== "once",
+        frequency: frequency === "once" ? null : frequency,
+        notes: notes.trim() || undefined,
+        reminderEnabled: false,
+      });
+
+      setInvalidFields({ plantName: false, title: false });
+      setPlantName("");
+      setSelectedPlantId(null);
+      setShowPlantSuggestions(false);
+      setTitle("");
+      setTaskType("watering");
+      setTime("09:00");
+      setFrequency("once");
+      setNotes("");
+      setShowForm(false);
+      lastAutoTitleRef.current = "";
+      setToastMessage("Task added successfully");
+      setToastVisible(true);
+    } catch {
+      // Firestore/auth issues are surfaced in the header error text.
+    }
   };
 
-  const removeTask = (id: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
+  const toggleStatus = async (task: ScheduleItem) => {
+    const nextStatus = task.status === "completed" ? "pending" : "completed";
+
+    if (nextStatus === "completed") {
+      await markAsCompleted(task.id);
+      triggerCheckCelebration(task.id);
+    } else {
+      await markAsPending(task.id);
+    }
   };
 
   const openTimePicker = () => {
@@ -257,49 +434,179 @@ export default function JournalScreen() {
     return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
   };
 
-  useEffect(() => {
-    Animated.timing(formOpacity, {
-      toValue: showForm ? 1 : 0,
-      duration: 350,
+  const getTaskAnimation = (taskId: string) => {
+    if (!taskAnimations.current[taskId]) {
+      taskAnimations.current[taskId] = new Animated.Value(1);
+    }
+    return taskAnimations.current[taskId];
+  };
+
+  const getCheckAnimation = (task: ScheduleItem) => {
+    if (!checkAnimations.current[task.id]) {
+      checkAnimations.current[task.id] = new Animated.Value(
+        task.status === "completed" ? 1 : 0,
+      );
+    }
+    return checkAnimations.current[task.id];
+  };
+
+  const getCelebrateAnimation = (taskId: string) => {
+    if (!celebrateAnimations.current[taskId]) {
+      celebrateAnimations.current[taskId] = new Animated.Value(0);
+    }
+    return celebrateAnimations.current[taskId];
+  };
+
+  const triggerCheckCelebration = (taskId: string) => {
+    const anim = getCelebrateAnimation(taskId);
+    anim.stopAnimation();
+    anim.setValue(0);
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: 460,
+      easing: Easing.out(Easing.quad),
       useNativeDriver: true,
     }).start();
-
-    if (showForm && formYPosition > 0) {
-      setTimeout(() => {
-        mainScrollRef.current?.scrollTo({
-          y: formYPosition - 100,
-          animated: true,
-        });
-      }, 100);
-    }
-  }, [showForm, formYPosition]);
+  };
 
   useEffect(() => {
-    taskAnimations.current = tasksForDay.map(() => new Animated.Value(0));
-    
-    Animated.sequence([
-      Animated.timing(tasksOpacity, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.stagger(
-        60,
-        taskAnimations.current.map((anim: Animated.Value) =>
-          Animated.timing(anim, {
+    let scrollTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    if (showForm) {
+      setRenderForm(true);
+      formOpacity.setValue(0);
+      formTranslateY.setValue(-10);
+      formScale.setValue(0.975);
+
+      requestAnimationFrame(() => {
+        Animated.parallel([
+          Animated.timing(formOpacity, {
             toValue: 1,
-            duration: 400,
+            duration: 280,
+            easing: Easing.bezier(0.4, 0, 0.2, 1),
             useNativeDriver: true,
-          })
-        )
-      ),
-    ]).start();
+          }),
+          Animated.timing(formTranslateY, {
+            toValue: 0,
+            duration: 280,
+            easing: Easing.bezier(0.4, 0, 0.2, 1),
+            useNativeDriver: true,
+          }),
+          Animated.timing(formScale, {
+            toValue: 1,
+            duration: 280,
+            easing: Easing.bezier(0.4, 0, 0.2, 1),
+            useNativeDriver: true,
+          }),
+        ]).start();
+      });
+
+      if (formYPosition > 0) {
+        scrollTimeoutId = setTimeout(() => {
+          mainScrollRef.current?.scrollTo({
+            y: formYPosition - 100,
+            animated: true,
+          });
+        }, 120);
+      }
+    } else if (renderForm) {
+      Animated.parallel([
+        Animated.timing(formOpacity, {
+          toValue: 0,
+          duration: 280,
+          easing: Easing.bezier(0.4, 0, 0.2, 1),
+          useNativeDriver: true,
+        }),
+        Animated.timing(formTranslateY, {
+          toValue: -10,
+          duration: 280,
+          easing: Easing.bezier(0.4, 0, 0.2, 1),
+          useNativeDriver: true,
+        }),
+        Animated.timing(formScale, {
+          toValue: 0.975,
+          duration: 280,
+          easing: Easing.bezier(0.4, 0, 0.2, 1),
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (finished) {
+          setRenderForm(false);
+        }
+      });
+    }
 
     return () => {
-      tasksOpacity.setValue(0);
-      taskAnimations.current.forEach((anim: Animated.Value) => anim.setValue(0));
+      if (scrollTimeoutId) {
+        clearTimeout(scrollTimeoutId);
+      }
     };
-  }, [tasksForDay]);
+  }, [
+    showForm,
+    renderForm,
+    formYPosition,
+    formOpacity,
+    formTranslateY,
+    formScale,
+  ]);
+
+  useEffect(() => {
+    if (!week.some((d) => d.key === selectedDate)) {
+      setSelectedDate(week[0]?.key ?? selectedDate);
+    }
+  }, [week, selectedDate]);
+
+  useEffect(() => {
+    const selectedIndex = week.findIndex((d) => d.key === selectedDate);
+    if (selectedIndex < 0) return;
+
+    const timeoutId = setTimeout(() => {
+      weekScrollRef.current?.scrollTo({
+        x: Math.max(0, selectedIndex * WEEK_SNAP),
+        animated: true,
+      });
+    }, 40);
+
+    return () => clearTimeout(timeoutId);
+  }, [selectedDate, week]);
+
+  useEffect(() => {
+    const isNewDay = previousAnimatedDate.current !== selectedDate;
+    const dayAnimations = tasksForDay.map((task) => {
+      const anim = getTaskAnimation(task.id);
+      if (isNewDay) {
+        anim.setValue(0);
+      }
+      return anim;
+    });
+
+    if (isNewDay) {
+      Animated.parallel(
+        dayAnimations.map((anim) =>
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 180,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ),
+      ).start();
+    }
+
+    previousAnimatedDate.current = selectedDate;
+  }, [tasksForDay, selectedDate]);
+
+  useEffect(() => {
+    tasks.forEach((task) => {
+      const anim = getCheckAnimation(task);
+      Animated.timing(anim, {
+        toValue: task.status === "completed" ? 1 : 0,
+        duration: 170,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [tasks]);
 
   const scrollToForm = () => {
     if (formYPosition > 0) {
@@ -315,6 +622,7 @@ export default function JournalScreen() {
       <ScrollView
         ref={mainScrollRef}
         contentContainerStyle={S.content}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View style={S.card}>
@@ -329,7 +637,12 @@ export default function JournalScreen() {
           </Text>
           <View style={S.rule} />
           <Text style={S.headerTitle}>Care Schedule</Text>
-          <Text style={S.headerSub}>Frontend Only Preview</Text>
+          <Text style={S.headerSub}>Synced with Firestore</Text>
+          {tasksError ? (
+            <Text style={[S.headerSub, { color: C.terracotta }]}>
+              {tasksError}
+            </Text>
+          ) : null}
           <View style={S.rule} />
 
           <View style={S.statsRow}>
@@ -353,21 +666,20 @@ export default function JournalScreen() {
         <View style={S.card}>
           <View style={S.rowBetween}>
             <View>
-              <Text style={S.sectionTitle}>Week View</Text>
-              <Text style={S.sectionHint}>Tap any day to load tasks</Text>
+              <Text style={S.sectionTitle}>{weekTitle}</Text>
+              <Text style={S.sectionHint}>Mon - Sun</Text>
             </View>
-            <Pressable onPress={() => setShowForm((v) => !v)} style={S.addBtn}>
-              <View style={S.addBtnIconWrap}>
-                <Ionicons
-                  name={showForm ? "close" : "add"}
-                  size={12}
-                  color={C.green}
-                />
+            <View style={S.weekHeaderActions}>
+              <View style={S.weekNavGroup}>
+                <Pressable onPress={() => goToWeek(-1)} style={S.weekNavBtn}>
+                  <Ionicons name="chevron-back" size={14} color={C.green} />
+                </Pressable>
+                <Text style={S.weekRangeText}>{weekRangeLabel}</Text>
+                <Pressable onPress={() => goToWeek(1)} style={S.weekNavBtn}>
+                  <Ionicons name="chevron-forward" size={14} color={C.green} />
+                </Pressable>
               </View>
-              <Text style={[S.mono, { color: C.green }]}>
-                {showForm ? "Close" : "Add Task"}
-              </Text>
-            </Pressable>
+            </View>
           </View>
           <View style={S.rule} />
 
@@ -394,20 +706,15 @@ export default function JournalScreen() {
               ];
               const active = day.key === selectedDate;
               const count = taskCountByDay[day.key] ?? 0;
-              const isToday = day.key === week[0].key;
+              const isToday = day.key === actualToday;
               const animatedScale = weekScrollX.interpolate({
                 inputRange,
-                outputRange: [0.98, 1, 0.98],
+                outputRange: [0.995, 1, 0.995],
                 extrapolate: "clamp",
               });
               const animatedOpacity = weekScrollX.interpolate({
                 inputRange,
-                outputRange: [0.85, 1, 0.85],
-                extrapolate: "clamp",
-              });
-              const animatedLift = weekScrollX.interpolate({
-                inputRange,
-                outputRange: [1.5, 0, 1.5],
+                outputRange: [0.96, 1, 0.96],
                 extrapolate: "clamp",
               });
 
@@ -415,10 +722,7 @@ export default function JournalScreen() {
                 <Animated.View
                   key={day.key}
                   style={{
-                    transform: [
-                      { scale: animatedScale },
-                      { translateY: animatedLift },
-                    ],
+                    transform: [{ scale: animatedScale }],
                     opacity: animatedOpacity,
                   }}
                 >
@@ -470,38 +774,108 @@ export default function JournalScreen() {
             })}
           </Animated.ScrollView>
 
-          <View style={S.selectedPill}>
-            <Ionicons name="sparkles-outline" size={12} color={C.green} />
-            <Text style={S.selectedPillText}>{selectedLabel.charAt(0).toUpperCase() + selectedLabel.slice(1)}</Text>
+          <View style={S.bottomInfoRow}>
+            <View style={S.selectedPill}>
+              <Ionicons name="sparkles-outline" size={12} color={C.green} />
+              <Text style={S.selectedPillText}>
+                {selectedLabel.charAt(0).toUpperCase() + selectedLabel.slice(1)}
+              </Text>
+            </View>
+
+            <Pressable onPress={() => setShowForm((v) => !v)} style={S.addBtn}>
+              <View style={S.addBtnIconWrap}>
+                <Ionicons
+                  name={showForm ? "close" : "add"}
+                  size={12}
+                  color={C.green}
+                />
+              </View>
+              <Text style={[S.mono, { color: C.green }]}>
+                {showForm ? "Close" : "Add Task"}
+              </Text>
+            </Pressable>
           </View>
         </View>
 
-        {showForm && (
+        {renderForm && (
           <Animated.View
             ref={formRef}
             onLayout={(e) => setFormYPosition(e.nativeEvent.layout.y)}
-            style={[S.card, { opacity: formOpacity }]}
+            style={[
+              S.card,
+              {
+                opacity: formOpacity,
+                transform: [
+                  { translateY: formTranslateY },
+                  { scale: formScale },
+                ],
+              },
+            ]}
           >
-            <Text style={S.sectionTitle}>New Task for {selectedLabel.charAt(0).toUpperCase() + selectedLabel.slice(1)}</Text>
+            <Text style={S.sectionTitle}>
+              New Task for{" "}
+              {selectedLabel.charAt(0).toUpperCase() + selectedLabel.slice(1)}
+            </Text>
             <View style={S.rule} />
 
-            <Text style={S.fieldLabel}>Plant Name</Text>
-            <TextInput
-              style={S.input}
-              value={plantName}
-              onChangeText={setPlantName}
-              placeholder="E.g. Monstera deliciosa"
-              placeholderTextColor={C.muted}
-            />
-
-            <Text style={S.fieldLabel}>Task Title</Text>
-            <TextInput
-              style={S.input}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="E.g. Water thoroughly"
-              placeholderTextColor={C.muted}
-            />
+            <Text
+              style={[
+                S.fieldLabel,
+                invalidFields.plantName && S.fieldLabelError,
+              ]}
+            >
+              Plant Name *
+            </Text>
+            <View style={{ position: "relative" }}>
+              <TextInput
+                style={[S.input, invalidFields.plantName && S.inputError]}
+                value={plantName}
+                onChangeText={(value) => {
+                  setPlantName(value);
+                  setSelectedPlantId(null);
+                  if (invalidFields.plantName) {
+                    setInvalidFields((prev) => ({ ...prev, plantName: false }));
+                  }
+                }}
+                onFocus={() => {
+                  if (!selectingSuggestionRef.current) {
+                    setShowPlantSuggestions(true);
+                  }
+                }}
+                onBlur={() => {
+                  if (!selectingSuggestionRef.current) {
+                    setTimeout(() => setShowPlantSuggestions(false), 100);
+                  }
+                }}
+                placeholder="E.g. Monstera deliciosa"
+                placeholderTextColor={C.muted}
+              />
+              {showPlantSuggestions && filteredPlants.length > 0 && (
+                <View style={S.suggestionsContainer}>
+                  <ScrollView
+                    scrollEnabled={filteredPlants.length > 4}
+                    nestedScrollEnabled={true}
+                    keyboardShouldPersistTaps="handled"
+                    style={S.suggestionsList}
+                  >
+                    {filteredPlants.map((plant) => (
+                      <Pressable
+                        key={plant.id}
+                        onPressIn={() => handleSelectPlant(plant)}
+                        style={S.suggestionItem}
+                      >
+                        <View>
+                          <Text style={S.suggestionName}>{plant.name}</Text>
+                          <Text style={S.suggestionSpecies}>
+                            {plant.species}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
 
             <Text style={S.fieldLabel}>Task Type</Text>
             <ScrollView
@@ -532,6 +906,25 @@ export default function JournalScreen() {
                 );
               })}
             </ScrollView>
+
+            <Text
+              style={[S.fieldLabel, invalidFields.title && S.fieldLabelError]}
+            >
+              Task Title *
+            </Text>
+            <TextInput
+              style={[S.input, invalidFields.title && S.inputError]}
+              value={title}
+              onChangeText={(value) => {
+                setTitle(value);
+                lastAutoTitleRef.current = "";
+                if (invalidFields.title) {
+                  setInvalidFields((prev) => ({ ...prev, title: false }));
+                }
+              }}
+              placeholder={defaultTaskTitle}
+              placeholderTextColor={C.muted}
+            />
 
             <View style={S.twoCol}>
               <View style={{ flex: 1 }}>
@@ -603,107 +996,317 @@ export default function JournalScreen() {
         )}
 
         <View style={S.card}>
-          <Text style={S.sectionTitle}>Tasks for {selectedLabel.charAt(0).toUpperCase() + selectedLabel.slice(1)}</Text>
+          <Text style={S.sectionTitle}>
+            Tasks for{" "}
+            {selectedLabel.charAt(0).toUpperCase() + selectedLabel.slice(1)}
+          </Text>
           <View style={S.rule} />
 
           {tasksForDay.length === 0 ? (
             <View style={S.emptyWrap}>
               <Ionicons name="calendar-outline" size={20} color={C.muted} />
-              <Text style={S.emptyText}>No Tasks Scheduled</Text>
+              <Text style={S.emptyText}>
+                {tasksLoading ? "Loading Tasks..." : "No Tasks Scheduled"}
+              </Text>
             </View>
           ) : (
-            <Animated.View style={{ opacity: tasksOpacity }}>
+            <View>
               {tasksForDay.map((task, index) => {
                 const meta = TASK_STYLE[task.taskType];
-                const taskAnimValue = taskAnimations.current[index];
-                const taskTranslateY = taskAnimValue
-                  ? taskAnimValue.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [20, 0],
-                    })
-                  : new Animated.Value(0);
-                const taskOpacity = taskAnimValue
-                  ? taskAnimValue.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 1],
-                    })
-                  : new Animated.Value(1);
+                const taskAnimValue = getTaskAnimation(task.id);
+                const checkAnimValue = getCheckAnimation(task);
+                const celebrateAnimValue = getCelebrateAnimation(task.id);
+                const taskTranslateY = taskAnimValue.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [4, 0],
+                });
+                const taskOpacity = taskAnimValue.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.96, 1],
+                });
+                const checkScale = checkAnimValue.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 1.08],
+                });
+                const checkOpacity = checkAnimValue.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.88, 1],
+                });
+                const confettiOpacity = celebrateAnimValue.interpolate({
+                  inputRange: [0, 0.15, 1],
+                  outputRange: [0, 1, 0],
+                });
 
                 return (
                   <Animated.View
                     key={task.id}
                     style={[
                       {
+                        width: "100%",
                         transform: [{ translateY: taskTranslateY }],
                         opacity: taskOpacity,
                       },
                     ]}
                   >
-                    <Pressable onPress={() => router.push({ pathname: "/tasks/[id]", params: { id: task.id } })} style={S.taskRowPressable}>
+                    <Pressable
+                      onPress={() =>
+                        router.push({
+                          pathname: "/tasks/[id]",
+                          params: {
+                            id: task.id,
+                            plantId: task.plantId,
+                            plantName: task.plantName,
+                            title: task.title,
+                            taskType: task.taskType,
+                            time: task.time,
+                            frequency: task.frequency,
+                            status: task.status,
+                            notes: task.notes ?? "",
+                            dateKey: task.dateKey,
+                          },
+                        })
+                      }
+                      style={S.taskRowPressable}
+                    >
                       <View
                         style={[
                           S.taskRow,
+                          { flex: 1 },
+                          task.status === "completed" && S.taskRowChecked,
                           index === tasksForDay.length - 1 && {
                             borderBottomWidth: 0,
                           },
                         ]}
                       >
                         <View
-                          style={[S.leftStripe, { backgroundColor: meta.color }]}
+                          style={[
+                            S.leftStripe,
+                            { backgroundColor: meta.color },
+                            task.status === "completed" && S.leftStripeChecked,
+                          ]}
                         />
 
-                        <View style={[S.iconBubble, { backgroundColor: C.leafBg }]}>
-                          <Ionicons name={meta.icon} size={14} color={meta.color} />
+                        <View
+                          style={[S.iconBubble, { backgroundColor: C.leafBg }]}
+                        >
+                          <Ionicons
+                            name={meta.icon}
+                            size={14}
+                            color={meta.color}
+                          />
                         </View>
 
-                        <View style={{ flex: 1 }}>
-                          <Text style={S.taskTitle}>{task.title}</Text>
-                          <Text style={S.taskMeta}>
+                        <View style={[{ flex: 1, minWidth: 0 }]}>
+                          <Text
+                            style={[
+                              S.taskTitle,
+                              task.status === "completed" && S.taskTitleChecked,
+                            ]}
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                          >
+                            {task.title}
+                          </Text>
+                          <Text
+                            style={[
+                              S.taskMeta,
+                              task.status === "completed" && S.taskMetaChecked,
+                            ]}
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                          >
                             {task.plantName} · {prettyTime(task.time)} ·{" "}
                             {task.frequency}
                           </Text>
                           {task.notes ? (
-                            <Text style={S.taskNotes}>{task.notes}</Text>
+                            <Text
+                              style={S.taskNotes}
+                              numberOfLines={2}
+                              ellipsizeMode="tail"
+                            >
+                              {task.notes}
+                            </Text>
                           ) : null}
                         </View>
 
                         <View style={S.taskRightActions}>
-                          <Pressable
-                            onPress={() => toggleStatus(task.id)}
-                            style={S.iconBtn}
-                          >
-                            <Ionicons
-                              name={
-                                task.status === "completed"
-                                  ? "checkmark-circle"
-                                  : "ellipse-outline"
-                              }
-                              size={18}
-                              color={
-                                task.status === "completed" ? C.green : C.muted
-                              }
-                            />
-                          </Pressable>
-                          <Pressable
-                            onPress={() => removeTask(task.id)}
-                            style={S.iconBtn}
-                          >
-                            <Ionicons
-                              name="trash-outline"
-                              size={16}
-                              color={C.terracotta}
-                            />
-                          </Pressable>
+                          <View style={S.checkControlWrap}>
+                            <Animated.View
+                              pointerEvents="none"
+                              style={[
+                                S.confettiLayer,
+                                { opacity: confettiOpacity },
+                              ]}
+                            >
+                              <Animated.View
+                                style={[
+                                  S.confettiDot,
+                                  S.confettiDotGreen,
+                                  {
+                                    transform: [
+                                      {
+                                        translateY:
+                                          celebrateAnimValue.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0, -16],
+                                          }),
+                                      },
+                                    ],
+                                  },
+                                ]}
+                              />
+                              <Animated.View
+                                style={[
+                                  S.confettiDot,
+                                  S.confettiDotAmber,
+                                  {
+                                    transform: [
+                                      {
+                                        translateX:
+                                          celebrateAnimValue.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0, 14],
+                                          }),
+                                      },
+                                      {
+                                        translateY:
+                                          celebrateAnimValue.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0, -10],
+                                          }),
+                                      },
+                                    ],
+                                  },
+                                ]}
+                              />
+                              <Animated.View
+                                style={[
+                                  S.confettiDot,
+                                  S.confettiDotSage,
+                                  {
+                                    transform: [
+                                      {
+                                        translateX:
+                                          celebrateAnimValue.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0, -14],
+                                          }),
+                                      },
+                                      {
+                                        translateY:
+                                          celebrateAnimValue.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0, -10],
+                                          }),
+                                      },
+                                    ],
+                                  },
+                                ]}
+                              />
+                              <Animated.View
+                                style={[
+                                  S.confettiDot,
+                                  S.confettiDotTerracotta,
+                                  {
+                                    transform: [
+                                      {
+                                        translateX:
+                                          celebrateAnimValue.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0, 10],
+                                          }),
+                                      },
+                                      {
+                                        translateY:
+                                          celebrateAnimValue.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0, 10],
+                                          }),
+                                      },
+                                    ],
+                                  },
+                                ]}
+                              />
+                              <Animated.View
+                                style={[
+                                  S.confettiDot,
+                                  S.confettiDotGreen,
+                                  {
+                                    transform: [
+                                      {
+                                        translateX:
+                                          celebrateAnimValue.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0, -10],
+                                          }),
+                                      },
+                                      {
+                                        translateY:
+                                          celebrateAnimValue.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0, 10],
+                                          }),
+                                      },
+                                    ],
+                                  },
+                                ]}
+                              />
+                            </Animated.View>
+
+                            <Animated.View
+                              style={{
+                                transform: [{ scale: checkScale }],
+                                opacity: checkOpacity,
+                              }}
+                            >
+                              <Pressable
+                                onPress={(e) => {
+                                  e.stopPropagation();
+                                  void toggleStatus(task);
+                                }}
+                                style={[
+                                  S.iconBtn,
+                                  task.status === "completed" &&
+                                    S.iconBtnChecked,
+                                ]}
+                              >
+                                <Ionicons
+                                  name={
+                                    task.status === "completed"
+                                      ? "checkmark-circle"
+                                      : "ellipse-outline"
+                                  }
+                                  size={24}
+                                  color={
+                                    task.status === "completed"
+                                      ? C.green
+                                      : C.muted
+                                  }
+                                />
+                              </Pressable>
+                            </Animated.View>
+                          </View>
                         </View>
                       </View>
                     </Pressable>
                   </Animated.View>
                 );
               })}
-            </Animated.View>
+            </View>
           )}
         </View>
       </ScrollView>
+
+      <AppToast
+        message={toastMessage}
+        visible={toastVisible}
+        position="top"
+        topOffset={72}
+        onHide={() => {
+          setToastVisible(false);
+          setToastMessage(null);
+        }}
+      />
 
       {showTimePicker && (
         <Modal
@@ -745,17 +1348,22 @@ export default function JournalScreen() {
 
 const S = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.paper },
-  content: { paddingHorizontal: 16, paddingVertical: 16, paddingBottom: 100, gap: 18 },
+  content: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    paddingBottom: 100,
+    gap: 18,
+  },
 
   card: {
     backgroundColor: C.card,
     borderRadius: 28,
-    borderWidth: 1,
+    borderWidth: 1.2,
     borderColor: "#C8C0B4",
     padding: 18,
     gap: 14,
   },
-  rule: { height: 1, backgroundColor: "#F5F0EB" },
+  rule: { height: 1.4, backgroundColor: "#DCCFC1" },
 
   mono: {
     fontFamily: "SpaceMono",
@@ -779,7 +1387,7 @@ const S = StyleSheet.create({
   statsRow: { flexDirection: "row", alignItems: "center" },
   statCell: { flex: 1, alignItems: "center", gap: 4 },
   statValue: { fontFamily: "SpaceMono", fontSize: 26, color: C.accentGreen },
-  statDivider: { width: 1, height: 40, backgroundColor: "#F0E9E1" },
+  statDivider: { width: 1.4, height: 40, backgroundColor: "#D4C5B6" },
 
   rowBetween: {
     flexDirection: "row",
@@ -808,6 +1416,31 @@ const S = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  weekHeaderActions: {
+    alignItems: "flex-end",
+  },
+  weekNavGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  weekNavBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 999,
+    borderWidth: 1.2,
+    borderColor: "#E8DFD6",
+    backgroundColor: "#F8FAF9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  weekRangeText: {
+    fontFamily: "SpaceMono",
+    fontSize: 11,
+    color: C.muted,
+    minWidth: 96,
+    textAlign: "center",
   },
   addBtnIconWrap: {
     width: 20,
@@ -896,9 +1529,14 @@ const S = StyleSheet.create({
     color: C.muted,
   },
   dayBottomLabelActive: { color: "#DFEEE4" },
-  selectedPill: {
+  bottomInfoRow: {
     marginTop: 14,
-    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  selectedPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -921,6 +1559,9 @@ const S = StyleSheet.create({
     color: C.muted,
     marginBottom: 8,
   },
+  fieldLabelError: {
+    color: C.terracotta,
+  },
   input: {
     borderWidth: 1.2,
     borderColor: "#E8DFD6",
@@ -931,6 +1572,10 @@ const S = StyleSheet.create({
     paddingVertical: 14,
     fontFamily: "SpaceMono",
     fontSize: 14,
+  },
+  inputError: {
+    borderColor: C.terracotta,
+    backgroundColor: "#FFF7F4",
   },
   inputNotes: { minHeight: 72, textAlignVertical: "top" },
 
@@ -1006,11 +1651,16 @@ const S = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#FAFAF8",
     paddingVertical: 13,
+    borderRadius: 12,
+  },
+  taskRowChecked: {
+    backgroundColor: "#FBFDFB",
   },
   taskRowPressable: {
     flexDirection: "row",
   },
   leftStripe: { width: 4, alignSelf: "stretch", borderRadius: 99 },
+  leftStripeChecked: { opacity: 0.45 },
   iconBubble: {
     width: 40,
     height: 40,
@@ -1019,11 +1669,38 @@ const S = StyleSheet.create({
     justifyContent: "center",
   },
   taskTitle: { fontFamily: "SpaceMono", fontSize: 15, color: C.text },
+  taskTitleChecked: {
+    color: "#5D6B61",
+    textDecorationLine: "line-through",
+  },
+  taskTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    justifyContent: "space-between",
+  },
+  weekBadge: {
+    backgroundColor: C.leafBg,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1.2,
+    borderColor: C.accentGreen,
+  },
+  weekBadgeText: {
+    fontFamily: "SpaceMono",
+    fontSize: 9,
+    fontWeight: "600",
+    color: C.accentGreen,
+  },
   taskMeta: {
     fontFamily: "SpaceMono",
     fontSize: 11,
     color: C.muted,
     marginTop: 2,
+  },
+  taskMetaChecked: {
+    color: "#9AA59D",
   },
   taskNotes: {
     fontFamily: "SpaceMono",
@@ -1032,8 +1709,54 @@ const S = StyleSheet.create({
     marginTop: 4,
   },
 
-  taskRightActions: { flexDirection: "row", alignItems: "center" },
-  iconBtn: { paddingHorizontal: 6, paddingVertical: 4 },
+  taskRightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
+  },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F7FAF8",
+  },
+  iconBtnChecked: {
+    backgroundColor: "#EEF5F0",
+  },
+  checkControlWrap: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  confettiLayer: {
+    position: "absolute",
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  confettiDot: {
+    position: "absolute",
+    width: 5,
+    height: 5,
+    borderRadius: 99,
+  },
+  confettiDotGreen: {
+    backgroundColor: C.accentGreen,
+  },
+  confettiDotAmber: {
+    backgroundColor: C.amber,
+  },
+  confettiDotSage: {
+    backgroundColor: C.sage,
+  },
+  confettiDotTerracotta: {
+    backgroundColor: C.terracotta,
+  },
 
   timePickerButton: {
     flexDirection: "row",
@@ -1123,5 +1846,37 @@ const S = StyleSheet.create({
     fontFamily: "SpaceMono",
     fontSize: 14,
     color: "#FFFFFF",
+  },
+  suggestionsContainer: {
+    position: "absolute",
+    top: 52,
+    left: 0,
+    right: 0,
+    backgroundColor: C.card,
+    borderRadius: 12,
+    borderWidth: 1.2,
+    borderColor: "#E8DFD6",
+    zIndex: 10,
+    maxHeight: 200,
+  },
+  suggestionsList: {
+    maxHeight: 200,
+  },
+  suggestionItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F5F0EB",
+  },
+  suggestionName: {
+    fontFamily: "SpaceMono",
+    fontSize: 14,
+    color: C.text,
+    marginBottom: 2,
+  },
+  suggestionSpecies: {
+    fontFamily: "SpaceMono",
+    fontSize: 11,
+    color: C.muted,
   },
 });

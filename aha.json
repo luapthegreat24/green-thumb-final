@@ -1,0 +1,1347 @@
+trefle.io, plant.id use these api'sPlant.id v3
+Documentation for API v2 can be found on our GitHub. Or see overview of changes between versions.
+
+Plant.id is a machine learning-based service to identify indoor plants, wildflowers, trees, grasses, and other plant species from images. Additionally, Plant.id can evaluate the health of plants and detect various diseases, vermins or pests. To use the API you need to get an API key.
+
+To use API from python, use SDK: kindwise API client.
+
+How to use this documentation
+This is a description of an important part of the API. The specification of the endpoints is given below. In the right column, you can find example calls of these endpoints (on the right you can toggle between different examples).
+
+View this collection directly on Postman to see endpoints and examples, and you can also try it out (after providing your API key).
+
+More implementation examples can be found on our GitHub.
+
+Download the OpenAPI (YAML) definition of this API.
+
+Authentication
+You should provide the Api-Key header with your API key. You can request it in the Admin Panel.
+
+Identification request
+There are two methods to create a new identification:
+
+using application/json request - all attributes including images are encoded in json body - see the example
+
+using multipart/form-data request - attributes are sent in text fields; images are sent as files - see the example
+
+Attributes:
+
+images
+
+application/json: a list of strings (required) with one or more images of the plant you want to identify, using either:
+
+image(s) encoded as strings in Base64,
+
+public URL(s) of images
+
+multipart/form-data - all images in file fields (names of file fields are not important)
+
+latitude - float (optional) - geographic coordinate, increases the identification accuracy
+
+longitude - float (optional) - geographic coordinate, increases the identification accuracy
+
+similar_images - boolean (optional) - if true, the model also selects images similar to the provided images for each suggestion
+
+custom_id - integer (optional) - a unique identifier, can be used to access the identification results
+
+datetime - string (optional) - to improve results, e.g. for images taken at different seasons, specify the date when the images were taken in ISO format with variable precision (e.g. 2023-06-22 for days or 2023-06-22T11:28 for minutes)
+
+health - string (optional)
+
+only - response contains only health assessment
+
+auto - the health assessment response is included only if a plant has a harmful or non-harmful condition (see is_harmful). The total credit cost depends on whether health assessment is returned (2 credits) or not (1 credit).
+
+all - response contains both plant species classification and health assessment; for such identification, 2 credits are charged (1 for taxa classification and 1 for health assessment)
+
+disease_level - string - control the specificity of suggestions in the response
+
+all - all classes; default
+
+general - only broad classes, e.g. feeding damage by insects
+
+suggestion_filter - object (optional) in format {"classification": "FILTER_NAME (filter examples below)"} - restricts the output of the model to a specified list of classes (taxonomy, region or plant type) and adjusts the probabilities. The lists can be combined with logical operators and parentheses. The lists are available here. Examples:
+
+Vegetables - {"classification": "vegetable"}
+
+Houseplants and wild plants in Europe - {"classification": "houseplant OR continent__europe"}
+
+Trees in Europe and North America - {"classification": "(continent__northern_america OR continent__europe) AND tree"}
+
+classification_level - string (optional) - classification model can give plant identification at 3 levels of taxonomy: genus, species and infraspecies (includes cultivars, subspecies, varieties and trademarks). This attribute allows to adjust which type of taxon is presented in response.
+
+species - suggested plants are genus and species; default
+
+all - suggested plants are genus, species and infraspecies
+
+genus - suggested plants are only genus
+
+classification_raw - boolean (optional) - if true, suggestions of classification are kept in 3 original taxonomy levels (genus, species and infraspecies), without postprocessing. Please note that the response structure is changed, see the example.
+
+symptoms - boolean (optional) - if true, returns heatmaps (as base64 images) and severity score for each identified disease symptom, and an overall defect score, see the example.
+
+Identification result
+Here we comment on important parts of the result. For a complete example of the results see the response examples below.
+
+access_token - a unique identifier of the identification, can be used to access the identification results
+
+result->is_plant - prediction of the model about presence of a plant in the input image; see this collection for examples
+
+binary - if false, image probably does not contain a plant
+
+probability - likelihood that image contains a plant
+
+result->classification->suggestions - predictions of the model containing taxa (genus or species) suggestions and additional information; each suggestion consists of:
+
+id - the id of the suggested taxon, which doesn't change over time
+
+name - the name of the taxon in our database (can change over time)
+
+probability - the level of certainty that suggested taxon is the one in the image
+
+similar_images - if similar_images=true is in request, list of representative images of the identified plant is returned; the images are selected to resemble the input image; they may contain license data that should be cited when using the image
+
+details - additional info you requested, see below
+
+Health assessment result
+If you request health assessment (via the health request attribute or the health_assessment endpoint), the response includes health block with a list of suggestions (classes). For a full example of the results, see the response examples below.
+
+result->is_healthy - prediction about whether the plant in the input images is healthy
+
+binary - boolean - true if the images are likely to contain a healthy plant
+
+probability - probability that images contain a healthy plant
+
+result->disease -> suggestions- predictions of the model include disease suggestions or non-harmful classes, and additional information; each suggestion consists of:
+
+id - string - stable identifier of the class (does not change over time)
+
+name - string - name of the class, either a non-scientific name (e.g. water deficiency) or scientific name (e.g. Agrobacterium tumefaciens); may change over time
+
+probability - number (0–1) - model confidence that this class is present in the image
+
+similar_images - if similar_images=true is in request, list of representative images of the identified plant is returned; the images are selected to resemble the input image; they may contain license data that should be cited when using the image
+
+details - additional requested information, see below
+
+result->disease -> question- follow-up questions designed to differentiate between the suggestions of the model (can be null when no question is needed). See this article for details.
+
+text - selected question
+
+options - one of the model's suggestions for yes and no answers (with suggestion_index, entity_id and name referring to the list of disease suggestions)
+
+Details
+There is a list of additional information about plant that you can get in identification result. To get specific information, include the detail's name in the GET parameters.
+
+The default language is English; to get details in a different language include the language parameter in the GET parameters. ISO 639 two-letter language codes are used, except for Simplified Chinese (zh) and Traditional Chinese (zh-hant).
+
+If a certain detail is unavailable, null is returned.
+
+Some details are licensed. If you want to use this detail, you should also cite the source.
+
+⚠️ We are not liable for damages or injury caused by actions based on inaccurate, misleading, incomplete or wrong information provided.
+
+This is a basic description of the available details. To see examples of return values and their exact format, see this example (for health assessment) with all details for a single language or this example with multiple languages.
+
+Taxa classification
+common_names - list of strings - localized - local, non-scientific name
+
+url - string - localized - link to plant profile page (usually Wikipedia); if localized page not available, an English one is provided
+
+description - string - localized, with license - short description from Wikipedia
+
+description_gpt - string - localized - short description from GPT
+
+description_all - string - localized, some with license - short description, combined Wikipedia and GPT. Read more.
+
+taxonomy - dict - scientific taxonomy
+
+name_authority - string - scientific name of the plant and authority, for example, Taraxacum officinale F.H.Wigg.
+
+rank - string - taxonomic rank
+
+gbif_id - integer - id in GBIF database
+
+inaturalist_id - int - id in iNaturalist database
+
+image - string - with licence - URL of representative image
+
+images - list - with licences - list of more URLs of representative images
+
+synonyms - list - other names of the plant
+
+edible_parts - list - edible/medicinal parts of the plant; read more in the Handbook
+
+propagation_methods - list - propagation methods of the plant (eg. seeds, cuttings...); read more in the Handbook.
+
+watering - dict - minimum and maximum of how wet environment the plant prefers; read more in the Handbook
+
+best_watering - string - short paragraph on optimal watering practices, English only
+
+best_light_condition - string - short paragraph on optimal lighting, English only
+
+best_soil_type - string - short paragraph on optimal soil types for growing the plant, English only
+
+common uses - string - short paragraph on how the plant can be used, English only
+
+toxicity - string - short paragraph on whether the plant is poisonous to humans or animals, English only
+
+cultural_significance - string - short paragraph on the importance of the plant in human culture, English only
+
+gpt - list - categories to which the plant belongs. They can include taxonomy, region or plant type. The lists are available here. Generated by LLM.
+
+Diseases
+local_name - string - localized - name of a class in the requested language; typically translations of non-scientific classes, such as water deficiency.
+
+description - string - localized - short description compiled from Wikipedia or drafted with an LLM and reviewed by a plant-health expert
+
+url - string - localized - link to a profile page for the class (usually Wikipedia or iNaturalist); an English page is provided if the requested page is not available; kindwise’s wiki-style knowledge base when Wikipedia coverage is missing
+
+treatment - dict - treatments and prevention for diseases. Not AI-generated but carefully compiled by a domain expert. Biological or chemical treatments for the disease may not be present for all diseases, but prevention is always present. Read more in the Handbook.
+
+biological - string - non-chemical/biocontrol options
+
+chemical - string - chemical controls
+
+prevention - string - cultural practices and preventative measures
+
+is_harmful - boolean - indicates whether a class is non-harmful (e.g., lichen/moss cover, flower buds, harmless insects) (non_harmful)
+
+classification - list - class higher in taxonomic hierarchy; may be empty for non-taxonomic or generalized classes.
+
+common_names - list - common names for the class
+
+The available languages are: English - en, German - de, Czech - cs, Spanish - es, French - fr, Italian - it, Dutch - nl, Polish - pl, Swedish - sv, Simplified Chinese - zh, Traditional Chinese - zh-hant, Danish - da, Turkish - tr, Hindi - hi, Arabic - ar, Brazilian Portuguese - pt-BR, Korean - ko.
+
+Response codes
+Response code	Explanation
+200	Successful request
+201	Identification created
+400	Invalid input data - check error message for details
+401	Invalid API key
+404	Object not found, e.g. identification, conversation
+429	Not enough credits
+500	Server error, try again or contact support
+Endpoints
+AUTHORIZATION
+API Key
+Key
+Api-Key
+
+Value
+your_api_key
+
+GET
+Get chatbot conversation
+https://plant.id/api/v3/identification/:access_token/conversation
+This endpoint allows you to ask the LLM chatbot questions about an identification. Every other call adds another question and the bot's answer to conversation.
+
+AUTHORIZATION
+API Key
+This request is using API Key from collectionPlant.id v3
+PATH VARIABLES
+access_token
+Body
+raw (json)
+json
+{
+    "question": "Is this plant edible?",
+    "prompt": "Give answer all CAPS.",
+    "temperature": 0.5,
+    "app_name": "MyApp"
+}
+Example Request
+Get chatbot conversation
+View More
+curl
+curl --location --request GET 'https://plant.id/api/v3/identification/43igHic7zpYUYNA/conversation' \
+--data '{
+    "question": "Is this plant edible?",
+    "prompt": "Give answer all CAPS.",
+    "temperature": 0.5,
+    "app_name": "MyApp"
+}'
+200 OK
+Example Response
+Body
+Headers (13)
+View More
+json
+{
+  "messages": [
+    {
+      "content": "Tell me who you are?",
+      "type": "question",
+      "created": "2024-06-12T07:41:53.413Z"
+    },
+    {
+      "content": "I AM MyAppBot, HERE TO HELP YOU WITH ANY QUESTIONS YOU HAVE ABOUT PLANTS AND THEIR IDENTIFICATION, AS WELL AS THEIR HEALTH ASSESSMENT. HOW CAN I ASSIST YOU TODAY?",
+      "type": "answer",
+      "created": "2024-06-12T07:41:53.413Z"
+    },
+    {
+      "content": "Is this plant edible?",
+      "type": "question",
+      "created": "2024-06-12T07:43:24.713Z"
+    },
+    {
+      "content": "THE PLANT IDENTIFIED IS Buddleja davidii, ALSO KNOWN AS ORANGE-EYED BUTTERFLY-BUSH. THIS PLANT IS PRIMARILY GROWN FOR ORNAMENTAL PURPOSES AND IS NOT CONSIDERED EDIBLE.",
+      "type": "answer",
+      "created": "2024-06-12T07:43:24.713Z"
+    }
+  ],
+  "identification": "43igHic7zpYUYNA",
+  "remaining_calls": 17,
+  "model_parameters": {
+    "model": "gpt-3.5-turbo",
+    "temperature": 0.5
+  },
+  "feedback": {}
+}
+DELETE
+Delete chatbot conversation
+https://plant.id/api/v3/identification/:access_token/conversation
+This endpoint allows you to ask the LLM chatbot questions about an identification. Every other call adds another question and the bot's answer to conversation.
+
+Parameters in POST JSON data:
+
+question - string - user's question to chatbot
+
+prompt - string - optional, allowed only for first question - extra text added to initial prompt that can modify chatbot's behavior during conversation
+
+temperature - float - optional, allowed only for first question - ranges 0-1; default is 0.5; lower temperature gives more deterministic output, higher values give more random output
+
+app_name - string - optional, allowed only for first question - chatbot uses this identity if asked about itself
+
+AUTHORIZATION
+API Key
+This request is using API Key from collectionPlant.id v3
+PATH VARIABLES
+access_token
+Body
+raw (json)
+json
+{
+    "question": "Is this plant edible?",
+    "prompt": "Give answer all CAPS.",
+    "temperature": 0.5,
+    "app_name": "MyApp"
+}
+Example Request
+Get chatbot conversation
+View More
+curl
+curl --location --request GET 'https://plant.id/api/v3/identification/43igHic7zpYUYNA/conversation' \
+--data '{
+    "question": "Is this plant edible?",
+    "prompt": "Give answer all CAPS.",
+    "temperature": 0.5,
+    "app_name": "MyApp"
+}'
+200 OK
+Example Response
+Body
+Headers (13)
+View More
+json
+{
+  "messages": [
+    {
+      "content": "Tell me who you are?",
+      "type": "question",
+      "created": "2024-06-12T07:41:53.413Z"
+    },
+    {
+      "content": "I AM MyAppBot, HERE TO HELP YOU WITH ANY QUESTIONS YOU HAVE ABOUT PLANTS AND THEIR IDENTIFICATION, AS WELL AS THEIR HEALTH ASSESSMENT. HOW CAN I ASSIST YOU TODAY?",
+      "type": "answer",
+      "created": "2024-06-12T07:41:53.413Z"
+    },
+    {
+      "content": "Is this plant edible?",
+      "type": "question",
+      "created": "2024-06-12T07:43:24.713Z"
+    },
+    {
+      "content": "THE PLANT IDENTIFIED IS Buddleja davidii, ALSO KNOWN AS ORANGE-EYED BUTTERFLY-BUSH. THIS PLANT IS PRIMARILY GROWN FOR ORNAMENTAL PURPOSES AND IS NOT CONSIDERED EDIBLE.",
+      "type": "answer",
+      "created": "2024-06-12T07:43:24.713Z"
+    }
+  ],
+  "identification": "43igHic7zpYUYNA",
+  "remaining_calls": 17,
+  "model_parameters": {
+    "model": "gpt-3.5-turbo",
+    "temperature": 0.5
+  },
+  "feedback": {}
+}
+POST
+Send feedback on chatbot conversation
+https://plant.id/api/v3/identification/:access_token/conversation/feedback
+Can be used to send user feedback to a chatbot conversation.
+
+Specifics:
+
+data must be in the form of JSON under the feedback field
+
+recommended structure is either rating - a number in the range 0-5 or comment - a text input from the user. Both can be included.
+
+Feedback can help us improve our model.
+
+AUTHORIZATION
+API Key
+This request is using API Key from collectionPlant.id v3
+PATH VARIABLES
+access_token
+Body
+raw (json)
+json
+{
+    "feedback": {
+        "rating": 5,
+        "comment": "Very usefull"
+    }
+}Plants
+List plants
+List plants
+
+Authorizations:
+token
+query Parameters
+filter	
+object (filters_species)
+Filter on values
+
+filter_not	
+object (filters_not_species)
+Exclude results matching null values
+
+order	
+object (sorts_species)
+Sort on values
+
+range	
+object (ranges_species)
+Range on values
+
+page	
+number
+The page to fetch
+
+Responses
+200 Success
+401 Invalid credentials
+
+get
+/api/v1/plants
+Response samples
+200401
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": [
+{},
+{},
+{},
+{},
+{},
+{}
+],
+"links": {
+"self": "/api/v1/plants",
+"first": "/api/v1/plants?page=1",
+"last": "/api/v1/plants?page=1"
+},
+"meta": {
+"total": 6
+}
+}
+Retrieve a plant
+Get a plant
+
+Authorizations:
+token
+path Parameters
+id
+required
+string
+The id or the slug of the requested plant
+
+Responses
+200 Success
+401 Invalid credentials
+
+get
+/api/v1/plants/{id}
+Response samples
+200401
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"id": 238331,
+"common_name": null,
+"slug": "senecio-gamolepis",
+"scientific_name": "Senecio gamolepis",
+"main_species_id": 273225,
+"image_url": null,
+"year": 1955,
+"bibliography": "Notas Mus. La Plata, Bot. 18(89): 222 (1955)",
+"author": "Cabrera",
+"family_common_name": "Aster family",
+"genus_id": 669,
+"observations": "Peru",
+"vegetable": false,
+"links": {},
+"main_species": {},
+"genus": {},
+"family": {},
+"species": [],
+"subspecies": [ ],
+"varieties": [ ],
+"hybrids": [ ],
+"forms": [ ],
+"subvarieties": [ ],
+"sources": []
+},
+"meta": {
+"last_modified": "2020-12-13T12:27:15.563Z"
+}
+}
+Search for a plant
+Search for a plant with the given scientific name, common name, synonym name etc.
+
+Authorizations:
+token
+query Parameters
+q
+required
+string
+The string to search
+
+page	
+number
+The page to fetch
+
+filter	
+object (filters_plants)
+Filter on values
+
+filter_not	
+object (filters_not_species)
+Exclude results matching null values
+
+order	
+object (sorts_plants)
+Sort on values
+
+range	
+object (ranges_plants)
+Range on values
+
+Responses
+200 Success
+
+get
+/api/v1/plants/search
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": [ ],
+"links": {
+"self": "/api/v1/plants/search?q=cocos",
+"first": "/api/v1/plants/search?page=1&q=cocos",
+"last": "/api/v1/plants/search?page=1&q=cocos"
+},
+"meta": {
+"total": 0
+}
+}
+Report an error
+A short API call to report an error regarding a plant entry
+
+Authorizations:
+token
+path Parameters
+id
+required
+string
+The id or the slug of the requested species
+
+Request Body schema: application/json
+notes	
+string
+An optional note about the incorrect data
+
+Responses
+201 Success
+401 Invalid credentials
+
+post
+/api/v1/plants/{id}/report
+Request samples
+Payload
+Content type
+application/json
+
+Copy
+{
+"notes": "The flower color is red"
+}
+Response samples
+201401
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"id": 1,
+"record_type": "Species",
+"record_id": 183086,
+"user_id": 19,
+"warning_type": "report",
+"change_status": "pending",
+"change_type": "update",
+"accepted_by": null,
+"notes": "The flower color is red",
+"created_at": "2020-12-13T12:27:23.527Z",
+"updated_at": "2020-12-13T12:27:23.529Z",
+"correction": null,
+"changes": null
+},
+"meta": {
+"last_modified": "2020-12-13T12:27:23.529Z"
+}
+}
+List plants in a distribution zone
+List all the plants in the requested zone.
+
+Authorizations:
+token
+path Parameters
+zone_id
+required
+string
+The zone id or twdg code
+
+query Parameters
+filter	
+object (filters_species)
+Filter on values
+
+filter_not	
+object (filters_not_species)
+Exclude results matching null values
+
+order	
+object (sorts_species)
+Sort on values
+
+range	
+object (ranges_species)
+Range on values
+
+page	
+number
+The page to fetch
+
+Responses
+200 Success
+401 Invalid credentials
+
+get
+/api/v1/distributions/{zone_id}/plants
+Response samples
+200401
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": [
+{},
+{},
+{},
+{}
+],
+"links": {
+"self": "/api/v1/plants?zone_id=bul",
+"first": "/api/v1/plants?page=1&zone_id=bul",
+"last": "/api/v1/plants?page=1&zone_id=bul"
+},
+"meta": {
+"total": 4
+}
+}
+List plants of a genus
+List plants of the requested genus
+
+Authorizations:
+token
+path Parameters
+genus_id
+required
+string
+The genus id or slug
+
+query Parameters
+filter	
+object (filters_species)
+Filter on values
+
+filter_not	
+object (filters_not_species)
+Exclude results matching null values
+
+order	
+object (sorts_species)
+Sort on values
+
+range	
+object (ranges_species)
+Range on values
+
+page	
+number
+The page to fetch
+
+Responses
+200 Success
+401 Invalid credentials
+
+get
+/api/v1/genus/{genus_id}/plants
+Response samples
+200401
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": [
+{}
+],
+"links": {
+"self": "/api/v1/plants?genus_id=senecio",
+"first": "/api/v1/plants?genus_id=senecio&page=1",
+"last": "/api/v1/plants?genus_id=senecio&page=1"
+},
+"meta": {
+"total": 1
+}
+}
+Species
+List species
+List species
+
+Authorizations:
+token
+query Parameters
+filter	
+object (filters_species)
+Filter on values
+
+filter_not	
+object (filters_not_species)
+Exclude results matching null values
+
+order	
+object (sorts_species)
+Sort on values
+
+range	
+object (ranges_species)
+Range on values
+
+page	
+number
+The page to fetch
+
+Responses
+200 Success
+401 Invalid credentials
+
+get
+/api/v1/species
+Response samples
+200401
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": [
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{}
+],
+"links": {
+"self": "/api/v1/species",
+"first": "/api/v1/species?page=1",
+"last": "/api/v1/species?page=1"
+},
+"meta": {
+"total": 15
+}
+}
+Retrieve a species
+Get a species
+
+Authorizations:
+token
+path Parameters
+id
+required
+string
+The id or the slug of the requested species
+
+Responses
+200 Success
+401 Invalid credentials
+
+get
+/api/v1/species/{id}
+Response samples
+200401
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"id": 183086,
+"common_name": "European mountain ash",
+"slug": "sorbus-aucuparia",
+"scientific_name": "Sorbus aucuparia",
+"year": 1753,
+"bibliography": "Sp. Pl.: 477 (1753)",
+"author": "L.",
+"status": "accepted",
+"rank": "species",
+"family_common_name": "Rose family",
+"genus_id": 677,
+"observations": "Europe to Iran",
+"vegetable": false,
+"image_url": "https://bs.floristic.org/image/o/63073d2fbf45b90701279405ecc2eec0272906ed",
+"genus": "Sorbus",
+"family": "Rosaceae",
+"duration": null,
+"edible_part": null,
+"edible": false,
+"images": {},
+"common_names": {},
+"distribution": {},
+"distributions": {},
+"flower": {},
+"foliage": {},
+"fruit_or_seed": {},
+"specifications": {},
+"growth": {},
+"links": {},
+"synonyms": [],
+"sources": []
+},
+"meta": {
+"images_count": 37,
+"sources_count": 5,
+"synonyms_count": 13,
+"last_modified": "2020-12-13T12:27:15.760Z"
+}
+}
+Search for a species
+Search for a species with the given scientific name, common name, synonym name etc.
+
+Authorizations:
+token
+query Parameters
+q
+required
+string
+The string to search
+
+page	
+number
+The page to fetch
+
+filter	
+object (filters_species)
+Filter on values
+
+filter_not	
+object (filters_not_species)
+Exclude results matching null values
+
+order	
+object (sorts_species)
+Sort on values
+
+range	
+object (ranges_species)
+Range on values
+
+Responses
+200 Success
+
+get
+/api/v1/species/search
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": [ ],
+"links": {
+"self": "/api/v1/species/search?q=cocos",
+"first": "/api/v1/species/search?page=1&q=cocos",
+"last": "/api/v1/species/search?page=1&q=cocos"
+},
+"meta": {
+"total": 0
+}
+}
+Report an error
+A short API call to report an error regarding a species entry
+
+Authorizations:
+token
+path Parameters
+id
+required
+string
+The id or the slug of the requested species
+
+Request Body schema: application/json
+notes	
+string
+An optional note about the incorrect data
+
+Responses
+201 Success
+401 Invalid credentials
+
+post
+/api/v1/species/{id}/report
+Request samples
+Payload
+Content type
+application/json
+
+Copy
+{
+"notes": "The flower color is red"
+}
+Response samples
+201401
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"id": 2,
+"record_type": "Species",
+"record_id": 183086,
+"user_id": 25,
+"warning_type": "report",
+"change_status": "pending",
+"change_type": "update",
+"accepted_by": null,
+"notes": "The flower color is red",
+"created_at": "2020-12-13T12:27:24.073Z",
+"updated_at": "2020-12-13T12:27:24.074Z",
+"correction": null,
+"changes": null
+},
+"meta": {
+"last_modified": "2020-12-13T12:27:24.074Z"
+}
+}
+Distributions
+List distributions zones
+List distributions zones. Zones are following the WGSRPD convention.
+
+WGSRPD provides an agreed system of geographical units at approximately "country" level and upwards for use in recording plant distributions. It allows adopting organizations to compare and exchange data with each other without loss of information due to incompatible geographical boundaries.
+
+Read more on the TDWG website.
+
+Authorizations:
+token
+query Parameters
+page	
+number
+The page to fetch
+
+Responses
+200 Success
+401 Invalid credentials
+
+get
+/api/v1/distributions
+Response samples
+200401
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": [
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{},
+{}
+],
+"links": {
+"self": "/api/v1/distributions",
+"first": "/api/v1/distributions?page=1",
+"next": "/api/v1/distributions?page=2",
+"last": "/api/v1/distributions?page=37"
+},
+"meta": {
+"total": 726
+}
+}
+Retrieve a distribution zone
+Get a zone
+
+Authorizations:
+token
+path Parameters
+id
+required
+string
+The id or the slug of the requested zone
+
+Responses
+200 Success
+401 Invalid credentials
+
+get
+/api/v1/distributions/{id}
+Response samples
+200401
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"id": 369,
+"name": "Europe",
+"slug": "1",
+"tdwg_code": "1",
+"tdwg_level": 1,
+"species_count": 0,
+"links": {},
+"parent": null,
+"children": []
+},
+"meta": {
+"last_modified": "2020-12-13T12:27:12.159Z"
+}
+}
+Auth
+Request a client-side token
+If you need to perform client-side requests, you will have to request a client-side token from you backend, and get a JWT token from this API call in return. This token will be usable on the client side. This call need your secret access token, the url of the website the client side requests will come from and optionally the client IP address.
+
+Authorizations:
+token
+Request Body schema: application/json
+origin
+required
+string
+The website url the API requests will come from
+
+ip	
+string or null
+The client IP
+
+Responses
+200 Success
+401 Invalid credentials
+422 Missing parameters
+
+post
+/api/auth/claim
+Request samples
+Payload
+Content type
+application/json
+
+Copy
+{
+"origin": "https://example.com",
+"ip": "12.23.34.45"
+}
+Response samples
+200401422
+Content type
+application/json
+
+Copy
+{
+"token": "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoyOCwib3JpZ2luIjoiaHR0cDovL2xvY2FsaG9zdDoxMjM0IiwiaXAiOiI6OjEiLCJleHBpcmUiOiIyMDIwLTEyLTE0IDEzOjI3OjI0ICswMTAwIiwiZXhwIjoxNjA3OTQ4ODQ0fQ.ENYKCGT0r9rdIXzb_NsEnmcfrc2CebQmAySbGy4aKjM",
+"expiration": "12-14-2020 13:27"
+}
+Corrections
+Searches corrections
+List corrections
+
+Authorizations:
+token
+Responses
+200 Success
+401 Invalid credentials
+
+get
+/api/v1/corrections
+Response samples
+200401
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": [
+{},
+{}
+],
+"links": {
+"self": "/api/v1/corrections",
+"first": "/api/v1/corrections?page=1",
+"last": "/api/v1/corrections?page=1"
+},
+"meta": {
+"total": 2
+}
+}
+Retrieve a correction
+Get a correction
+
+Authorizations:
+token
+path Parameters
+id
+required
+string
+The id of the requested correction
+
+Responses
+200 Success
+401 Invalid credentials
+
+get
+/api/v1/corrections/{id}
+Response samples
+200401
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"id": 7,
+"record_type": "Species",
+"record_id": 116854,
+"user_id": 35,
+"warning_type": null,
+"change_status": "pending",
+"change_type": "update",
+"accepted_by": null,
+"notes": "The height is wrong, it's way smaller",
+"created_at": "2020-12-13T12:27:24.457Z",
+"updated_at": "2020-12-13T12:27:24.457Z",
+"correction": {},
+"changes": null
+},
+"meta": {
+"last_modified": "2020-12-13T12:27:24.457Z"
+}
+}
+Submit a correction
+Submit a new correction for the given species, that will be reviewed and merged into the database. See Complete our data to get started.
+
+Authorizations:
+token
+path Parameters
+record_id
+required
+string
+The id or the slug of the requested correction
+
+Request Body schema: application/json
+notes	
+string or null
+Some optional notes you can add. They will be visible to everybody
+
+source_type	
+string or null
+Enum: "external" "observation" "report" null
+Where does this data come from ? If "external", you'll need to provide the "source_reference" field with the url or the name of the source, such as a wikipedia article, a publication, etc...
+
+source_reference	
+string or null
+The url of the name of an article or a publication for theses changes
+
+correction	
+object
+The fields to correct
+
+Responses
+201 Success
+401 Invalid credentials
+422 Invalid parameters
+
+post
+/api/v1/corrections/species/{record_id}
+Request samples
+Payload
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"notes": "string",
+"source_type": "external",
+"source_reference": "string",
+"correction": {
+"scientific_name": "Abelmoschus nonexistus",
+"rank": "species",
+"genus": "Torilis",
+"year": null,
+"author": "Moench",
+"bibliography": null,
+"common_name": "Okra|Bonnie Green Okra",
+"observations": "Vegetal flavour, Medium-yellow flowers",
+"planting_description": "string",
+"planting_sowing_description": "A description on how to sow the plant",
+"duration": [],
+"flower_color": [],
+"flower_conspicuous": true,
+"foliage_color": [],
+"foliage_texture": null,
+"leaf_retention": false,
+"fruit_color": [],
+"fruit_conspicuous": false,
+"fruit_seed_persistence": false,
+"fruit_months": [],
+"bloom_months": [],
+"ground_humidity": null,
+"growth_form": null,
+"growth_habit": null,
+"growth_months": [],
+"growth_rate": null,
+"edible_part": [],
+"vegetable": false,
+"light": 8,
+"atmospheric_humidity": 3,
+"adapted_to_coarse_textured_soils": null,
+"adapted_to_fine_textured_soils": null,
+"adapted_to_medium_textured_soils": null,
+"anaerobic_tolerance": null,
+"average_height_unit": "cm",
+"average_height_value": "250",
+"maximum_height_unit": "cm",
+"maximum_height_value": "280",
+"planting_row_spacing_unit": "cm",
+"planting_row_spacing_value": "80",
+"planting_spread_unit": "cm",
+"planting_spread_value": "100",
+"planting_days_to_harvest": 120,
+"maximum_precipitation_unit": "mm",
+"maximum_precipitation_value": "2230",
+"minimum_precipitation_unit": "mm",
+"minimum_precipitation_value": "1300",
+"minimum_root_depth_unit": "cm",
+"minimum_root_depth_value": "30",
+"ph_maximum": null,
+"ph_minimum": null,
+"soil_nutriments": 0,
+"soil_salinity": 0,
+"minimum_temperature_deg_c": 5,
+"maximum_temperature_deg_c": 20,
+"soil_texture": null,
+"ligneous_type": null,
+"toxicity": null
+}
+}
+Response samples
+201401422
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"id": 13,
+"record_type": "Species",
+"record_id": 1164724,
+"user_id": 42,
+"warning_type": null,
+"change_status": "pending",
+"change_type": "update",
+"accepted_by": null,
+"notes": "This tree can grows up to 68 meters",
+"created_at": "2020-12-13T12:27:24.659Z",
+"updated_at": "2020-12-13T12:27:24.659Z",
+"correction": {},
+"changes": {}
+},
+"meta": {
+"last_modified": "2020-12-13T12:27:24.659Z"
+}
+}

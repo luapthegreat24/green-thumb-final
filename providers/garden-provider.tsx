@@ -17,6 +17,7 @@ import type {
   PlantHistoryLog,
   UpsertPlantInput,
 } from "@/features/garden/domain/plant";
+import { useAppToast } from "@/providers/app-toast-provider";
 import { useAuth } from "@/providers/auth-provider";
 import {
   addCareLogDoc,
@@ -112,6 +113,7 @@ function computeWateringDueAt(plant: Plant) {
 
 export function GardenProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const { showToast } = useAppToast();
   const [rawPlants, setRawPlants] = useState<FirestorePlant[]>([]);
   const [careLogs, setCareLogs] = useState<FirestoreCareLog[]>([]);
   const [schedules, setSchedules] = useState<FirestoreSchedule[]>([]);
@@ -193,13 +195,16 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
   }) => {
     if (!user) throw new Error("You must be logged in.");
 
-    return createScheduleDoc({
+    const scheduleId = await createScheduleDoc({
       userId: user.uid,
       plantId: input.plantId,
       taskType: input.taskType,
       dueAt: input.dueAt,
       status: "pending",
     });
+
+    showToast("Schedule created");
+    return scheduleId;
   };
 
   const updateSchedule = async (
@@ -207,6 +212,7 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
     updates: Partial<Pick<FirestoreSchedule, "dueAt" | "status" | "taskType">>,
   ) => {
     await updateScheduleDoc(scheduleId, updates);
+    showToast("Schedule updated");
   };
 
   const addPlant = async (input: UpsertPlantInput) => {
@@ -255,6 +261,8 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
       dueAt: computeWateringDueAt(pseudoPlant),
     });
 
+    showToast("Plant added successfully");
+
     return plantId;
   };
 
@@ -299,6 +307,8 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
     } else if (user) {
       await createSchedule({ plantId, taskType: "watering", dueAt });
     }
+
+    showToast("Plant updated successfully");
   };
 
   const deletePlant = async (plantId: string) => {
@@ -313,6 +323,8 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
       ...logsToDelete.map((entry) => deleteCareLogDoc(entry.id)),
       ...schedulesToDelete.map((entry) => deleteScheduleDoc(entry.id)),
     ]);
+
+    showToast("Plant deleted");
   };
 
   const getPlantById = (plantId: string) =>
@@ -354,6 +366,8 @@ export function GardenProvider({ children }: { children: React.ReactNode }) {
         await createSchedule({ plantId, taskType: "watering", dueAt });
       }
     }
+
+    showToast("Care history updated");
   };
 
   const filteredPlants = useMemo(
