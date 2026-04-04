@@ -17,6 +17,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -266,6 +267,7 @@ function Banner({ text }: { text: string }) {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { user, profile, loading, updateUserProfile, logout } = useAuth();
 
   // Form state
@@ -399,6 +401,7 @@ export default function ProfileScreen() {
     setLocalLoading(true);
     try {
       await logout();
+      router.replace("/welcome");
     } finally {
       setLocalLoading(false);
     }

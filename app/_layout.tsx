@@ -34,7 +34,16 @@ export default function RootLayout() {
                 <Stack screenOptions={{ headerShown: false }}>
                   <Stack.Screen name="(auth)" />
                   <Stack.Screen name="(tabs)" />
-                  <Stack.Screen name="welcome" />
+                  <Stack.Screen
+                    name="welcome"
+                    options={{
+                      headerShown: false,
+                      gestureEnabled: false,
+                      fullScreenGestureEnabled: false,
+                      headerBackVisible: false,
+                      animationEnabled: false,
+                    }}
+                  />
                   <Stack.Screen name="plants/new" />
                   <Stack.Screen name="plants/[id]" />
                   <Stack.Screen name="plants/[id]/edit" />
