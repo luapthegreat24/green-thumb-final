@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "GREEN THUMB FINAL PROJECT",
+    "name": "Green",
     "slug": "GREEN-THUMB-FINAL-PROJECT",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,7 +13,8 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "Green Thumb uses your location to show local weather for plant care.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Green Thumb uses your location to show local weather for plant care."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Green Thumb uses your location to show local weather for plant care.",
+        "NSUserNotificationsUsageDescription": "Green Thumb sends reminders for plant care tasks that you create."
       }
     },
     "android": {
@@ -43,6 +44,7 @@
           }
         }
       ],
+      "expo-notifications",
       "@react-native-community/datetimepicker"
     ],
     "experiments": {

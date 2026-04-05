@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Redirect, Tabs, useRouter } from "expo-router";
+import { Redirect, Tabs, usePathname, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -184,10 +184,13 @@ function HerbariumTabBar({ state, descriptors, navigation }: TabBarProps) {
 
 export default function TabLayout() {
   const router = useRouter();
+  const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { user, initializing } = useAuth();
   const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
   const fabMenuAnim = useRef(new Animated.Value(0)).current;
+
+  const shouldHideChrome = pathname === "/chatbot";
 
   useEffect(() => {
     Animated.timing(fabMenuAnim, {
@@ -299,6 +302,12 @@ export default function TabLayout() {
     outputRange: [0, 0.34],
   });
 
+  useEffect(() => {
+    if (shouldHideChrome && isFabMenuOpen) {
+      setIsFabMenuOpen(false);
+    }
+  }, [isFabMenuOpen, shouldHideChrome]);
+
   if (initializing) {
     return (
       <View
@@ -316,6 +325,27 @@ export default function TabLayout() {
 
   if (!user) {
     return <Redirect href={"/login" as never} />;
+  }
+
+  if (shouldHideChrome) {
+    return (
+      <View style={{ flex: 1 }}>
+        <Tabs
+          screenOptions={{
+            headerShown: false,
+          }}
+          tabBar={() => null}
+        >
+          {TABS.map((tab) => (
+            <Tabs.Screen
+              key={tab.name}
+              name={tab.name}
+              options={{ title: tab.label }}
+            />
+          ))}
+        </Tabs>
+      </View>
+    );
   }
 
   return (

@@ -194,8 +194,9 @@ export function GlobalAppChrome() {
 
   const fabBaseBottom = insets.bottom + 90;
   const speedDialBaseBottom = fabBaseBottom + 52;
+  const shouldShowChrome = !isAuthScreen && pathname !== "/chatbot";
 
-  if (!shouldShow) return null;
+  if (!shouldShowChrome) return null;
 
   return (
     <>

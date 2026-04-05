@@ -102,14 +102,21 @@ export async function updateUserProfileDoc(
 export function subscribeUserProfile(
   uid: string,
   onChange: (profile: UserProfile | null) => void,
+  onError?: (error: unknown) => void,
 ): Unsubscribe {
-  return onSnapshot(doc(firebaseDb, "users", uid), (snapshot) => {
-    if (!snapshot.exists()) {
-      onChange(null);
-      return;
-    }
+  return onSnapshot(
+    doc(firebaseDb, "users", uid),
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        onChange(null);
+        return;
+      }
 
-    const data = snapshot.data() as UserProfileDoc;
-    onChange(mapProfile(snapshot.id, data));
-  });
+      const data = snapshot.data() as UserProfileDoc;
+      onChange(mapProfile(snapshot.id, data));
+    },
+    (error) => {
+      onError?.(error);
+    },
+  );
 }

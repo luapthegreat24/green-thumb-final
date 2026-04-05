@@ -56,6 +56,16 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function mapAuthError(error: unknown) {
+  if (error instanceof Error) {
+    if (error.message.includes("Image is too large to upload")) {
+      return error.message;
+    }
+
+    if (error.message.startsWith("Failed to convert image to base64:")) {
+      return error.message;
+    }
+  }
+
   const code =
     typeof error === "object" && error && "code" in error
       ? String((error as { code?: unknown }).code)
@@ -104,38 +114,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const authUnsubscribe = onAuthStateChanged(
       firebaseAuth,
       async (nextUser) => {
-        profileUnsubscribe?.();
-        profileUnsubscribe = undefined;
+        try {
+          profileUnsubscribe?.();
+          profileUnsubscribe = undefined;
 
-        if (!nextUser) {
-          setUser(null);
-          setProfile(null);
-          setInitializing(false);
-          return;
-        }
-
-        setUser(nextUser);
-
-        profileUnsubscribe = subscribeUserProfile(
-          nextUser.uid,
-          async (nextProfile) => {
-            if (!nextProfile) {
-              const createInput: Parameters<typeof createUserProfileDoc>[0] = {
-                uid: nextUser.uid,
-                email: nextUser.email ?? "",
-                displayName: nextUser.displayName ?? "",
-              };
-              if (nextUser.photoURL) {
-                createInput.photoURL = nextUser.photoURL;
-              }
-              await createUserProfileDoc(createInput);
-              return;
-            }
-
-            setProfile(nextProfile);
+          if (!nextUser) {
+            setUser(null);
+            setProfile(null);
             setInitializing(false);
-          },
-        );
+            return;
+          }
+
+          setUser(nextUser);
+
+          profileUnsubscribe = subscribeUserProfile(
+            nextUser.uid,
+            async (nextProfile) => {
+              try {
+                if (!nextProfile) {
+                  const createInput: Parameters<
+                    typeof createUserProfileDoc
+                  >[0] = {
+                    uid: nextUser.uid,
+                    email: nextUser.email ?? "",
+                    displayName: nextUser.displayName ?? "",
+                  };
+                  if (nextUser.photoURL) {
+                    createInput.photoURL = nextUser.photoURL;
+                  }
+                  await createUserProfileDoc(createInput);
+                  return;
+                }
+
+                setProfile(nextProfile);
+                setInitializing(false);
+              } catch (caught) {
+                setError(mapAuthError(caught));
+                setInitializing(false);
+              }
+            },
+            (caught) => {
+              setError(mapAuthError(caught));
+              setInitializing(false);
+            },
+          );
+        } catch (caught) {
+          setError(mapAuthError(caught));
+          setInitializing(false);
+        }
+      },
+      (caught) => {
+        setError(mapAuthError(caught));
+        setInitializing(false);
       },
     );
 
