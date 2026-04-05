@@ -1,36 +1,40 @@
 {
   "expo": {
-    "name": "GREEN",
-    "slug": "GREEN",
+    "name": "GREEN THUMB FINAL PROJECT",
+    "slug": "GREEN-THUMB-FINAL-PROJECT",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./LOGO1.png",
     "scheme": "green",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.paul.greenthumb",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Green Thumb uses your location to show local weather for plant care.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Green Thumb uses your location to show local weather for plant care."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#E9E9E9",
+        "foregroundImage": "./LOGO1.png",
+        "monochromeImage": "./LOGO1.png"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.luap_omsim.GREEN"
     },
     "web": {
       "bundler": "metro",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./LOGO1.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./LOGO1.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -44,6 +48,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2243eb3c-e704-4965-9d52-bb0fc6611a1b"
+      }
     }
   }
 }

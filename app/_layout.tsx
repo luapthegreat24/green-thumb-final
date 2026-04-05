@@ -32,7 +32,13 @@ export default function RootLayout() {
                 value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
               >
                 <Stack screenOptions={{ headerShown: false }}>
-                  <Stack.Screen name="(auth)" />
+                  <Stack.Screen
+                    name="(auth)"
+                    options={{
+                      gestureEnabled: false,
+                      fullScreenGestureEnabled: false,
+                    }}
+                  />
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen
                     name="welcome"
@@ -41,7 +47,7 @@ export default function RootLayout() {
                       gestureEnabled: false,
                       fullScreenGestureEnabled: false,
                       headerBackVisible: false,
-                      animationEnabled: false,
+                      animation: "none",
                     }}
                   />
                   <Stack.Screen name="plants/new" />

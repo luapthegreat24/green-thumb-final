@@ -8,15 +8,19 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppButton } from "@/components/ui/app-button";
 import { AppText } from "@/components/ui/app-text";
 import { DS } from "@/constants/app-design-system";
+import { useResponsiveMetrics } from "@/hooks/use-responsive-metrics";
 
 // --- Sub-components for better organization ---
 
-function WelcomeHeader() {
+function WelcomeHeader({ isNarrow }: { isNarrow: boolean }) {
   return (
     <Animated.View entering={FadeInDown.duration(500)} style={styles.header}>
       <View style={styles.eyebrowContainer}>
         <View style={styles.eyebrowDot} />
-        <AppText variant="mono" style={styles.eyebrow}>
+        <AppText
+          variant="mono"
+          style={[styles.eyebrow, isNarrow && { letterSpacing: 1.4 }]}
+        >
           Green Thumb
         </AppText>
       </View>
@@ -24,16 +28,46 @@ function WelcomeHeader() {
   );
 }
 
-function WelcomeHero() {
+function WelcomeHero({
+  isNarrow,
+  scaled,
+}: {
+  isNarrow: boolean;
+  scaled: (value: number, min: number, max: number) => number;
+}) {
   return (
-    <View style={styles.textContainer}>
+    <View
+      style={[
+        styles.textContainer,
+        { marginBottom: Math.round(scaled(DS.spacing.xxxl, 28, 56)) },
+      ]}
+    >
       <Animated.View entering={FadeInDown.duration(500).delay(100)}>
-        <AppText variant="display" style={styles.title}>
+        <AppText
+          variant="display"
+          style={[
+            styles.title,
+            {
+              fontSize: Math.round(scaled(56, 38, 58)),
+              lineHeight: Math.round(scaled(60, 42, 62)),
+            },
+          ]}
+        >
           Track,{"\n"}nurse, grow.
         </AppText>
       </Animated.View>
       <Animated.View entering={FadeInDown.duration(500).delay(200)}>
-        <AppText variant="body" style={styles.subtitle}>
+        <AppText
+          variant="body"
+          style={[
+            styles.subtitle,
+            {
+              fontSize: Math.round(scaled(16, 14, 17)),
+              lineHeight: Math.round(scaled(24, 20, 25)),
+              maxWidth: isNarrow ? "100%" : "85%",
+            },
+          ]}
+        >
           A minimalist botanical space to track your personal garden and
           continue exactly where you left off.
         </AppText>
@@ -77,22 +111,28 @@ function WelcomeActions() {
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
+  const { isNarrow, scaled, screenPadding } = useResponsiveMetrics();
 
   return (
     <View
       style={[
         styles.page,
         {
-          paddingTop: insets.top + DS.spacing.xxxl,
+          paddingTop: insets.top + Math.round(scaled(DS.spacing.xxxl, 34, 60)),
           paddingBottom: Math.max(insets.bottom, DS.spacing.xl),
         },
       ]}
     >
-      <View style={styles.content}>
-        <WelcomeHeader />
+      <View style={[styles.content, { paddingHorizontal: screenPadding }]}>
+        <WelcomeHeader isNarrow={isNarrow} />
 
-        <View style={styles.bottomSpace}>
-          <WelcomeHero />
+        <View
+          style={[
+            styles.bottomSpace,
+            { paddingBottom: Math.round(scaled(DS.spacing.lg, 12, 20)) },
+          ]}
+        >
+          <WelcomeHero isNarrow={isNarrow} scaled={scaled} />
           <WelcomeActions />
         </View>
       </View>
@@ -109,7 +149,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: DS.spacing.xl,
     justifyContent: "space-between",
   },
   header: {
@@ -136,24 +175,17 @@ const styles = StyleSheet.create({
   },
   bottomSpace: {
     justifyContent: "flex-end",
-    paddingBottom: DS.spacing.lg,
   },
   textContainer: {
-    marginBottom: DS.spacing.xxxl,
     gap: DS.spacing.lg,
   },
   title: {
-    fontSize: 56,
     fontWeight: "900",
     color: DS.colors.text,
     letterSpacing: -2,
-    lineHeight: 60,
   },
   subtitle: {
     color: DS.colors.textMuted,
-    fontSize: 16,
-    lineHeight: 24,
-    maxWidth: "85%",
   },
   actionsContainer: {
     gap: DS.spacing.md,

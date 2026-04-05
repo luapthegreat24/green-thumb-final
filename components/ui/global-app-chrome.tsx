@@ -199,7 +199,7 @@ export function GlobalAppChrome() {
 
   return (
     <>
-      <View style={[st.barOuter, { bottom: insets.bottom + 10 }]}> 
+      <View style={[st.barOuter, { bottom: insets.bottom + 10 }]}>
         <View style={st.tabRow}>
           {TABS.map((tab) => {
             const focused = isTabRoute(pathname) && pathname === tab.route;

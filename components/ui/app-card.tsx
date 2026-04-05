@@ -2,6 +2,7 @@ import React from "react";
 import { StyleSheet, View, type ViewProps } from "react-native";
 
 import { DS } from "@/constants/app-design-system";
+import { useResponsiveMetrics } from "@/hooks/use-responsive-metrics";
 
 type AppCardProps = ViewProps & {
   elevated?: boolean;
@@ -13,9 +14,20 @@ export function AppCard({
   elevated = false,
   ...props
 }: AppCardProps) {
+  const { scaled } = useResponsiveMetrics();
+
   return (
     <View
-      style={[styles.card, elevated ? DS.shadow.cardSoft : null, style]}
+      style={[
+        styles.card,
+        {
+          padding: Math.round(scaled(DS.spacing.lg, 12, 20)),
+          borderRadius: Math.round(scaled(DS.radius.lg, 14, 24)),
+          gap: Math.round(scaled(DS.spacing.md, 10, 16)),
+        },
+        elevated ? DS.shadow.cardSoft : null,
+        style,
+      ]}
       {...props}
     >
       {children}

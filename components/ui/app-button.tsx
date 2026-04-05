@@ -10,6 +10,7 @@ import {
 
 import { AppText } from "@/components/ui/app-text";
 import { DS } from "@/constants/app-design-system";
+import { useResponsiveMetrics } from "@/hooks/use-responsive-metrics";
 
 type AppButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
@@ -28,11 +29,19 @@ export function AppButton({
   disabled,
   ...props
 }: AppButtonProps) {
+  const { scaled } = useResponsiveMetrics();
+
   return (
     <Pressable
       disabled={disabled}
       style={({ pressed }) => [
         styles.base,
+        {
+          minHeight: Math.round(scaled(44, 40, 52)),
+          borderRadius: Math.round(scaled(DS.radius.md, 10, 14)),
+          paddingHorizontal: Math.round(scaled(DS.spacing.md, 10, 16)),
+          paddingVertical: Math.round(scaled(10, 8, 12)),
+        },
         styles[variant],
         disabled && styles.disabled,
         pressed && !disabled && styles.pressed,

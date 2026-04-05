@@ -23,6 +23,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SP, TY } from "@/constants/herbarium-theme";
+import { useResponsiveMetrics } from "@/hooks/use-responsive-metrics";
 import { useFadeUp, usePressScale } from "@/hooks/use-screen-animations";
 import { useAuth } from "@/providers/auth-provider";
 import { useCareTasks } from "@/providers/care-tasks-provider";
@@ -404,6 +405,7 @@ function WeatherCard({
 export function DashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { scaled, screenPadding } = useResponsiveMetrics();
   const { profile, user } = useAuth();
   const {
     plants,
@@ -501,6 +503,8 @@ export function DashboardScreen() {
       contentContainerStyle={[
         S.scroll,
         {
+          paddingHorizontal: screenPadding,
+          gap: Math.round(scaled(SP.lg, 12, 20)),
           paddingTop: insets.top + SP.sm,
           paddingBottom: insets.bottom + SP.xl + 64,
         },
@@ -529,8 +533,28 @@ export function DashboardScreen() {
 
         {/* Hero greeting */}
         <View style={S.mastheadBody}>
-          <Text style={S.mastheadHello}>{`${greeting},`}</Text>
-          <Text style={S.mastheadName}>{name}</Text>
+          <Text
+            style={[
+              S.mastheadHello,
+              {
+                fontSize: Math.round(scaled(15, 13, 16)),
+                lineHeight: Math.round(scaled(19, 17, 21)),
+              },
+            ]}
+          >
+            {`${greeting},`}
+          </Text>
+          <Text
+            style={[
+              S.mastheadName,
+              {
+                fontSize: Math.round(scaled(34, 27, 36)),
+                lineHeight: Math.round(scaled(38, 31, 40)),
+              },
+            ]}
+          >
+            {name}
+          </Text>
         </View>
 
         <Rule />
@@ -742,7 +766,7 @@ export function DashboardScreen() {
 
 const S = StyleSheet.create({
   screen: { flex: 1, backgroundColor: D.paper },
-  scroll: { paddingHorizontal: SP.lg, gap: SP.lg },
+  scroll: { gap: SP.lg },
   loadScreen: {
     flex: 1,
     backgroundColor: D.paper,

@@ -16,15 +16,20 @@ import Animated, {
 
 import { AppText } from "@/components/ui/app-text";
 import { DS } from "@/constants/app-design-system";
+import { useResponsiveMetrics } from "@/hooks/use-responsive-metrics";
 import { useAuth } from "@/providers/auth-provider";
 
 export default function WelcomeScreen() {
-  const WELCOME_DELAY_MS = 2500;
+  const WELCOME_DELAY_MS = 2000;
   const { user } = useAuth();
+  const { width, scaled, screenPadding } = useResponsiveMetrics();
   const router = useRouter();
   const hasScheduledNavigation = useRef(false);
   const orbPulse = useSharedValue(0);
   const railProgress = useSharedValue(0);
+
+  const orbASize = Math.round(Math.min(width * 0.72, scaled(280, 210, 300)));
+  const orbBSize = Math.round(Math.min(width * 0.58, scaled(220, 170, 250)));
 
   // Extract a readable username
   const username =
@@ -78,23 +83,50 @@ export default function WelcomeScreen() {
     }, WELCOME_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [WELCOME_DELAY_MS, orbPulse, railProgress, router, user]);
+  }, [user]);
 
   return (
     <View style={styles.container}>
       <Animated.View
         entering={FadeIn.duration(500)}
-        style={[styles.backdropOrb, styles.backdropOrbA, orbAnimatedStyle]}
+        style={[
+          styles.backdropOrb,
+          styles.backdropOrbA,
+          {
+            width: orbASize,
+            height: orbASize,
+            top: -Math.round(orbASize * 0.25),
+            right: -Math.round(orbASize * 0.32),
+          },
+          orbAnimatedStyle,
+        ]}
       />
       <Animated.View
         entering={FadeIn.duration(700)}
-        style={[styles.backdropOrb, styles.backdropOrbB, orbAnimatedStyle]}
+        style={[
+          styles.backdropOrb,
+          styles.backdropOrbB,
+          {
+            width: orbBSize,
+            height: orbBSize,
+            bottom: -Math.round(orbBSize * 0.23),
+            left: -Math.round(orbBSize * 0.36),
+          },
+          orbAnimatedStyle,
+        ]}
       />
 
       <Animated.View
         entering={FadeInDown.duration(700).springify()}
         exiting={FadeOut}
-        style={styles.content}
+        style={[
+          styles.content,
+          {
+            maxWidth: Math.min(width - screenPadding * 2, 420),
+            paddingVertical: Math.round(scaled(DS.spacing.xxl, 20, 40)),
+            paddingHorizontal: Math.round(scaled(DS.spacing.xl, 16, 30)),
+          },
+        ]}
       >
         <Animated.View style={[styles.iconContainer, leafAnimatedStyle]}>
           <Ionicons name="leaf" size={48} color={DS.colors.primary} />
@@ -104,7 +136,16 @@ export default function WelcomeScreen() {
           GREEN THUMB
         </AppText>
 
-        <AppText variant="title" style={styles.title}>
+        <AppText
+          variant="title"
+          style={[
+            styles.title,
+            {
+              fontSize: Math.round(scaled(28, 22, 30)),
+              lineHeight: Math.round(scaled(34, 28, 36)),
+            },
+          ]}
+        >
           Welcome, {username}
         </AppText>
 
@@ -127,7 +168,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: DS.colors.bg,
     overflow: "hidden",
-    paddingHorizontal: DS.spacing.xl,
+    paddingHorizontal: DS.spacing.lg,
   },
   backdropOrb: {
     position: "absolute",
@@ -135,14 +176,10 @@ const styles = StyleSheet.create({
     backgroundColor: DS.colors.primary,
   },
   backdropOrbA: {
-    width: 280,
-    height: 280,
     top: -70,
     right: -90,
   },
   backdropOrbB: {
-    width: 220,
-    height: 220,
     bottom: -50,
     left: -80,
     backgroundColor: DS.colors.amber,
@@ -155,8 +192,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: DS.colors.borderSoft,
     borderRadius: DS.radius.lg,
-    paddingVertical: DS.spacing.xxl,
-    paddingHorizontal: DS.spacing.xl,
     shadowColor: "#1C2318",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1,
@@ -182,8 +217,6 @@ const styles = StyleSheet.create({
   },
   title: {
     fontWeight: "700",
-    fontSize: 28,
-    lineHeight: 34,
     marginBottom: DS.spacing.sm,
     color: DS.colors.text,
     textAlign: "center",

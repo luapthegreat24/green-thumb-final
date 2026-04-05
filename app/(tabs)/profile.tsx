@@ -67,9 +67,6 @@ const D = {
 const HERO_H = 320; // height of the full-bleed avatar block
 const OVERLAP = 60; // how far the identity card overlaps the hero
 
-const DEFAULT_AVATAR =
-  "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=512&q=80";
-
 // ─── Animation hook for press scale ──────────────────────────────────────────
 
 function usePressScale(to = 0.965) {
@@ -442,7 +439,7 @@ export default function ProfileScreen() {
         ══════════════════════════════════════════════════ */}
         <Animated.View style={[S.hero, heroAnim]}>
           <Image
-            source={{ uri: photoUri ?? DEFAULT_AVATAR }}
+            source={photoUri ? { uri: photoUri } : undefined}
             style={S.heroBg}
             contentFit="cover"
           />

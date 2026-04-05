@@ -27,8 +27,34 @@ export default function AuthLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" options={{ gestureEnabled: false }} />
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        gestureEnabled: false,
+        fullScreenGestureEnabled: false,
+      }}
+    >
+      <Stack.Screen
+        name="index"
+        options={{
+          gestureEnabled: false,
+          fullScreenGestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="login"
+        options={{
+          gestureEnabled: false,
+          fullScreenGestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="signup"
+        options={{
+          gestureEnabled: false,
+          fullScreenGestureEnabled: false,
+        }}
+      />
     </Stack>
   );
 }
