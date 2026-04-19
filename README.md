@@ -48,3 +48,31 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## Plant Lookup
+
+The app now includes a simple plant lookup feature powered by the Trefle API.
+
+### Where to find it
+
+- Open the **Plants** tab in the bottom navigation.
+
+### What it shows
+
+- Common name
+- Scientific name
+- Short description
+- Plant image when available
+
+### Environment variable
+
+The app reads the Trefle key from:
+
+```bash
+EXPO_PUBLIC_TREFLE_API_KEY=your_key_here
+```
+
+### Implementation files
+
+- [services/trefle.ts](services/trefle.ts)
+- [app/(tabs)/plants.tsx](<app/(tabs)/plants.tsx>)

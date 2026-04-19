@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1033707100782",
+    "project_id": "mob-comp-de142",
+    "storage_bucket": "mob-comp-de142.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1033707100782:android:aa7ba37cbec23d1f83647f",
+        "android_client_info": {
+          "package_name": "mob.comp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQJh1zOPMDCdD_2s0Ea0qwzSAdByQyVmE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

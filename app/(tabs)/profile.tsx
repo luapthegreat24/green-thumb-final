@@ -1,7 +1,7 @@
 /**
- * explore.tsx — Schedule Screen
- * Apple-minimalist design: upcoming watering schedule, plant care tasks,
- * and activity timeline with iOS grouping and animations.
+ * profile.tsx — User Profile Screen
+ * Apple-minimalist design: card-based layout with iOS grouping, status indicators,
+ * account info sections, and logout action.
  */
 
 import React, { useRef, useEffect, ComponentProps } from "react";
@@ -18,12 +18,16 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
+import { useAuth } from "@/contexts/auth";
+import { useSignOut } from "@/hooks/use-sign-out";
 import Svg, { Path } from "react-native-svg";
 
 const { width: SW } = Dimensions.get("window");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DESIGN TOKENS
+// DESIGN TOKENS — iOS system design language
 // ─────────────────────────────────────────────────────────────────────────────
 const T = {
   pageBg:       "#F2F2F7",
@@ -34,15 +38,19 @@ const T = {
   labelTert:    "#8E8E93",
   labelInverse: "#FFFFFF",
   sysGreen:     "#34C759",
+  sysGreenDark: "#248A3D",
   sysBlue:      "#007AFF",
   sysOrange:    "#FF9500",
   sysRed:       "#FF3B30",
-  accent:       "#2D6A4F",
-  accentMid:    "#40916C",
-  accentPale:   "#ECFBEE",
+  sysPurple:    "#BF5AF2",
   sysGray:      "#8E8E93",
+  sysGray4:     "#D1D1D6",
   sysGray5:     "#E5E5EA",
   sysGray6:     "#F2F2F7",
+  accent:       "#2D6A4F",
+  accentMid:    "#40916C",
+  accentLight:  "#D8F3DC",
+  accentPale:   "#ECFBEE",
   sep:          "rgba(60,60,67,0.18)",
   shadow:       "#000000",
 };
@@ -73,16 +81,11 @@ const IcChevronRight = ({ color = "rgba(60,60,67,0.28)", size = 8 }: { color?: s
   </Svg>
 );
 
-const SectionHeader = ({ title, action, delay = 0 }: { title: string; action?: string; delay?: number }) => {
+const SectionHeader = ({ title, delay = 0 }: { title: string; delay?: number }) => {
   const anim = useFadeUp(delay);
   return (
     <Animated.View style={[s.sectionHeader, anim]}>
       <Text style={s.sectionTitle}>{title}</Text>
-      {action && (
-        <TouchableOpacity activeOpacity={0.6}>
-          <Text style={s.sectionAction}>{action}</Text>
-        </TouchableOpacity>
-      )}
     </Animated.View>
   );
 };
@@ -95,61 +98,57 @@ const InsetDivider = ({ indent = 70 }: { indent?: number }) => (
   <View style={[s.insetDivider, { marginLeft: indent }]} />
 );
 
-interface ScheduleItemProps {
+interface StatRowProps {
   icon: IcName;
   iconColor: string;
   iconBg: string;
-  title: string;
-  time: string;
-  plants: string;
-  status?: "due" | "upcoming" | "done";
+  label: string;
+  value: string;
   last?: boolean;
 }
 
-const ScheduleItem = ({
+const StatRow = ({
   icon,
   iconColor,
   iconBg,
-  title,
-  time,
-  plants,
-  status = "upcoming",
+  label,
+  value,
   last = false,
-}: ScheduleItemProps) => {
-  const statusColor =
-    status === "due" ? T.sysRed : status === "done" ? T.sysGreen : T.sysBlue;
-  const statusBg =
-    status === "due" ? "#FFEBEB" : status === "done" ? "#E8F9ED" : "#E5F1FF";
-
-  return (
-    <>
-      <TouchableOpacity style={s.scheduleItem} activeOpacity={0.75}>
-        <View style={[s.scheduleIcon, { backgroundColor: iconBg }]}>
-          <Ionicons name={icon} size={16} color={iconColor} />
-        </View>
-        <View style={s.scheduleBody}>
-          <View style={s.scheduleTopLine}>
-            <Text style={s.scheduleTitle}>{title}</Text>
-            <View style={[s.scheduleBadge, { backgroundColor: statusBg }]}>
-              <Text style={[s.scheduleBadgeText, { color: statusColor }]}>
-                {status === "due" ? "Due" : status === "done" ? "Done" : "Soon"}
-              </Text>
-            </View>
-          </View>
-          <Text style={s.scheduleTime}>{time}</Text>
-          <Text style={s.schedulePlants}>{plants}</Text>
-        </View>
-        <IcChevronRight />
-      </TouchableOpacity>
-      {!last && <InsetDivider indent={62} />}
-    </>
-  );
-};
+}: StatRowProps) => (
+  <>
+    <View style={s.statRow}>
+      <View style={[s.statIcon, { backgroundColor: iconBg }]}>
+        <Ionicons name={icon} size={16} color={iconColor} />
+      </View>
+      <View style={s.statBody}>
+        <Text style={s.statLabel}>{label}</Text>
+        <Text style={s.statValue}>{value}</Text>
+      </View>
+      <IcChevronRight />
+    </View>
+    {!last && <InsetDivider indent={62} />}
+  </>
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCHEDULE SCREEN
+// PROFILE SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
-export default function ScheduleScreen() {
+export default function ProfileScreen() {
+  const { user } = useAuth();
+  const { signOut } = useSignOut();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    await signOut();
+    router.replace("/(auth)/login");
+  };
+
+  const handleLogoutPress = async () => {
+    Haptics.selectionAsync();
+    await handleLogout();
+  };
+
   return (
     <View style={s.root}>
       <StatusBar barStyle="dark-content" backgroundColor={T.pageBg} />
@@ -157,93 +156,100 @@ export default function ScheduleScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll} bounces>
           
           {/* ════════════════════════════════════════════════
-              TODAY'S TASKS
+              HERO — User intro card with avatar
               ════════════════════════════════════════════════ */}
-          <SectionHeader title="Today" action="3 tasks" delay={50} />
-          <Animated.View style={[{ marginHorizontal: 16 }, useFadeUp(70)]}>
+          <Animated.View style={[s.heroCard, useFadeUp(50)]}>
+            <View style={s.avatarContainer}>
+              <View style={s.avatar}>
+                <Ionicons name="person" size={36} color={T.accentMid} />
+              </View>
+            </View>
+            <Text style={s.heroName}>{user?.displayName || "GreenThumb User"}</Text>
+            <Text style={s.heroSub}>{user?.email}</Text>
+            <View style={s.heroStatusChip}>
+              <View style={s.heroStatusDot} />
+              <Text style={s.heroStatusText}>Account Active</Text>
+            </View>
+          </Animated.View>
+
+          {/* ════════════════════════════════════════════════
+              ACCOUNT INFO
+              ════════════════════════════════════════════════ */}
+          <SectionHeader title="Account" delay={80} />
+          <Animated.View style={[{ marginHorizontal: 16 }, useFadeUp(100)]}>
             <InsetList>
-              <ScheduleItem
+              <StatRow
+                icon="mail-outline"
+                iconColor={T.sysBlue}
+                iconBg="#E5F1FF"
+                label="Email"
+                value={user?.email || "—"}
+              />
+              <InsetDivider indent={62} />
+              <StatRow
+                icon="person-outline"
+                iconColor={T.accentMid}
+                iconBg={T.accentPale}
+                label="Display Name"
+                value={user?.displayName || "Not set"}
+                last
+              />
+            </InsetList>
+          </Animated.View>
+
+          {/* ════════════════════════════════════════════════
+              GARDEN STATS
+              ════════════════════════════════════════════════ */}
+          <SectionHeader title="Garden Overview" delay={150} />
+          <Animated.View style={[{ marginHorizontal: 16 }, useFadeUp(170)]}>
+            <InsetList>
+              <StatRow
+                icon="leaf-outline"
+                iconColor={T.sysGreen}
+                iconBg="#E8F9ED"
+                label="Total Plants"
+                value="14 plants"
+              />
+              <InsetDivider indent={62} />
+              <StatRow
                 icon="water-outline"
                 iconColor={T.sysBlue}
                 iconBg="#E5F1FF"
-                title="Water Plants"
-                time="9:00 AM"
-                plants="Monstera, Pothos, Snake Plant"
-                status="due"
+                label="Last Watering"
+                value="2 minutes ago"
               />
               <InsetDivider indent={62} />
-              <ScheduleItem
-                icon="sunny-outline"
+              <StatRow
+                icon="calendar-outline"
                 iconColor={T.sysOrange}
                 iconBg="#FFF3E0"
-                title="Check Light"
-                time="12:30 PM"
-                plants="All plants in window"
-              />
-              <InsetDivider indent={62} />
-              <ScheduleItem
-                icon="leaf-outline"
-                iconColor={T.accentMid}
-                iconBg={T.accentPale}
-                title="Mist Leaves"
-                time="3:00 PM"
-                plants="Calathea, Ferns"
+                label="Member Since"
+                value="3 weeks"
                 last
               />
             </InsetList>
           </Animated.View>
 
           {/* ════════════════════════════════════════════════
-              UPCOMING
+              ACTIONS
               ════════════════════════════════════════════════ */}
-          <SectionHeader title="This Week" delay={120} />
-          <Animated.View style={[{ marginHorizontal: 16 }, useFadeUp(140)]}>
+          <SectionHeader title="Actions" delay={220} />
+          <Animated.View style={[{ marginHorizontal: 16 }, useFadeUp(240)]}>
             <InsetList>
-              <ScheduleItem
-                icon="cut-outline"
-                iconColor={T.sysGreen}
-                iconBg="#E8F9ED"
-                title="Trim Dead Leaves"
-                time="Wed, 10:00 AM"
-                plants="ZZ Plant, Rubber Tree"
-              />
-              <InsetDivider indent={62} />
-              <ScheduleItem
-                icon="bag-check-outline"
-                iconColor={T.sysPurple}
-                iconBg="#F3E8FF"
-                title="Fertilize"
-                time="Fri, 2:00 PM"
-                plants="All with growth"
-                last
-              />
-            </InsetList>
-          </Animated.View>
-
-          {/* ════════════════════════════════════════════════
-              UPCOMING
-              ════════════════════════════════════════════════ */}
-          <SectionHeader title="Next Month" delay={190} />
-          <Animated.View style={[{ marginHorizontal: 16 }, useFadeUp(210)]}>
-            <InsetList>
-              <ScheduleItem
-                icon="swap-vertical-outline"
-                iconColor={T.sysOrange}
-                iconBg="#FFF3E0"
-                title="Repot Plants"
-                time="Next month"
-                plants="Monstera, Philodendron"
-              />
-              <InsetDivider indent={62} />
-              <ScheduleItem
-                icon="analytics-outline"
-                iconColor={T.sysBlue}
-                iconBg="#E5F1FF"
-                title="Spring Fertilizing"
-                time="Mid-month"
-                plants="All plants"
-                last
-              />
+              <TouchableOpacity
+                style={s.actionRow}
+                onPress={handleLogoutPress}
+                activeOpacity={0.75}
+              >
+                <View style={[s.actionIcon, { backgroundColor: "#FFEBEB" }]}>
+                  <Ionicons name="log-out-outline" size={16} color={T.sysRed} />
+                </View>
+                <View style={s.actionBody}>
+                  <Text style={s.actionLabel}>Log Out</Text>
+                  <Text style={s.actionSub}>Sign out from your account</Text>
+                </View>
+                <IcChevronRight />
+              </TouchableOpacity>
             </InsetList>
           </Animated.View>
 
@@ -262,14 +268,75 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: T.pageBg },
   safe: { flex: 1 },
   scroll: { paddingTop: 20 },
+  
+  // Hero card
+  heroCard: {
+    marginHorizontal: 16,
+    backgroundColor: T.cardBg,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+    marginBottom: 32,
+    shadowColor: T.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.04)",
+  },
+  avatarContainer: { marginBottom: 16 },
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: T.accentPale,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: T.accentMid,
+  },
+  heroName: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: T.label,
+    letterSpacing: -0.5,
+    marginBottom: 4,
+  },
+  heroSub: {
+    fontSize: 14,
+    color: T.labelSec,
+    fontWeight: "400",
+    marginBottom: 16,
+  },
+  heroStatusChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(52,199,89,0.1)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(52,199,89,0.25)",
+  },
+  heroStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: T.sysGreen,
+  },
+  heroStatusText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: T.sysGreenDark,
+  },
 
+  // Sections
   sectionHeader: {
     marginHorizontal: 16,
     marginVertical: 12,
     marginBottom: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
   },
   sectionTitle: {
     fontSize: 17,
@@ -277,12 +344,8 @@ const s = StyleSheet.create({
     color: T.label,
     letterSpacing: -0.3,
   },
-  sectionAction: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: T.accentMid,
-  },
 
+  // Inset lists
   insetList: {
     backgroundColor: T.cardBg,
     borderRadius: 12,
@@ -294,14 +357,14 @@ const s = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 1,
-    marginBottom: 20,
   },
   insetDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: T.sep,
   },
 
-  scheduleItem: {
+  // Stat rows
+  statRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
@@ -309,7 +372,7 @@ const s = StyleSheet.create({
     gap: 12,
     backgroundColor: T.cardBg,
   },
-  scheduleIcon: {
+  statIcon: {
     width: 38,
     height: 38,
     borderRadius: 10,
@@ -317,37 +380,46 @@ const s = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  scheduleBody: { flex: 1, gap: 3 },
-  scheduleTopLine: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  scheduleTitle: {
+  statBody: { flex: 1, gap: 2 },
+  statLabel: {
     fontSize: 14,
     fontWeight: "600",
     color: T.label,
     letterSpacing: -0.15,
-    flex: 1,
   },
-  scheduleBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+  statValue: {
+    fontSize: 12,
+    color: T.labelSec,
+    fontWeight: "400",
   },
-  scheduleBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
+
+  // Action rows
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+    backgroundColor: T.cardBg,
   },
-  scheduleTime: {
+  actionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  actionBody: { flex: 1, gap: 1 },
+  actionLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: T.sysRed,
+    letterSpacing: -0.15,
+  },
+  actionSub: {
     fontSize: 12,
     color: T.sysGray,
     fontWeight: "400",
-  },
-  schedulePlants: {
-    fontSize: 11,
-    color: T.labelTert,
-    fontWeight: "400",
-    marginTop: 2,
   },
 });

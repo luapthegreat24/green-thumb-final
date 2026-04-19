@@ -1,11 +1,10 @@
 import { Colors } from "@/constants/theme";
-import { AuthProvider } from "@/contexts/auth";
 import { useAuth } from "@/contexts/auth";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Stack } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 
-function RootLayoutContent() {
+export default function RootLayoutContent() {
   const { isLoggedIn, loading } = useAuth();
   const colorScheme = useColorScheme();
   const colors = colorScheme === "dark" ? Colors.dark : Colors.light;
@@ -41,13 +40,5 @@ function RootLayoutContent() {
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       )}
     </Stack>
-  );
-}
-
-export default function RootLayout() {
-  return (
-    <AuthProvider>
-      <RootLayoutContent />
-    </AuthProvider>
   );
 }
